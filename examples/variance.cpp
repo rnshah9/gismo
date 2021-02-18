@@ -26,7 +26,7 @@ namespace gismo
 	    std::vector<index_t> chosen, notChosen;
 	    for(index_t i=0; i<params.cols(); i++)
 	    {
-		if(rand() % 100 <= testPerc)
+		if(rand() % 100 < testPerc)
 		    notChosen.push_back(i);
 		else
 		    chosen.push_back(i);
@@ -57,7 +57,7 @@ namespace gismo
             gsInfo << "Setting aside " << m_testParams.cols() << "/" << m_param_values.cols() + m_testParams.cols() << " points for testing." << std::endl;
 	}
 
-	void compute();
+	void compute(index_t maxIter);
 
     protected:
 	T perc()
@@ -96,23 +96,24 @@ namespace gismo
     };
 
     template <short_t d, class T>
-    void gsVarianceFitting<d, T>::compute()
+    void gsVarianceFitting<d, T>::compute(index_t maxIter)
     {
 	if(m_pointErrors.size() == 0)
 	{
 	    gsHFitting<d, T>::compute(m_lambda);
 	    gsHFitting<d, T>::computeErrors();
 	}
-	for(index_t iter=0; iter < 8; iter++)
+	for(index_t iter=0; iter < maxIter; iter++)
 	{
-	    gsHFitting<d, T>::nextIteration(m_tol, m_tol);
+	    gsHFitting<d, T>::nextIteration(m_tol, -1); // The -1 means we use m_ref.
 	    gsHFitting<d, T>::computeErrors();
 	    gsInfo << "iter: " << iter << std::endl;
             gsInfo << "basis: " << *m_basis << std::endl;
 	    gsInfo << "full: " << perc() << "%, test: " << validate() << "%" << std::endl;
+	    gsWriteParaview(*m_result, "iter-" + util::to_string(iter), 14400, false, true);
 	}
 
-        gsWriteParaview(*m_result, "result", 14400, false, true);
+        //gsWriteParaview(*m_result, "result", 640000, false, true);
         gsMatrix<T> data = m_points.transpose();
         gsWriteParaviewPoints(data, "data");
         gsMatrix<T> test = m_testPoints.transpose();
@@ -150,11 +151,12 @@ int main(int argc, char *argv[])
     fd_in.getId<gsMatrix<> >(0, uv );
     fd_in.getId<gsMatrix<> >(1, xyz);
 
-    gsKnotVector<real_t> knots(-1.0, 1.0, 0, 4);
-    gsTensorBSplineBasis<2> basis(knots, knots);
+    gsKnotVector<real_t> uKnots(0.0, 1.0, 1, 4);
+    gsKnotVector<real_t> vKnots(0.0, 1.0, 0, 4);
+    gsTensorBSplineBasis<2> basis(uKnots, vKnots);
     gsTHBSplineBasis<2> thb(basis);
     gsVarianceFitting<2, real_t> fitting(uv, xyz, thb, ref, ext, lambda, tol, tst);
-    fitting.compute();
+    fitting.compute(iter);
 
     return 0;
 }
