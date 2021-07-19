@@ -300,12 +300,12 @@ private:
     m_arcLength->options().setInt("BifurcationMethod",0); // 0: determinant, 1: eigenvalue
     m_arcLength->options().setInt("Method",method);
     m_arcLength->options().setInt("AngleMethod",0); // 0: step, 1: iteration
-    // m_arcLength->options().setReal("Scaling",0.0);
+    m_arcLength->options().setReal("Scaling",0.0);
     m_arcLength->options().setReal("Tol",tol);
     m_arcLength->options().setReal("TolU",tolU);
     m_arcLength->options().setReal("TolF",tolF);
     m_arcLength->options().setInt("MaxIter",maxit);
-    m_arcLength->options().setSwitch("Verbose",true);
+    m_arcLength->options().setSwitch("Verbose",false);
     // m_arcLength->options().setReal("Relaxation",relax);
     // if (quasiNewtonInt>0)
     // {
@@ -353,6 +353,8 @@ private:
 
     real_t dL = tstep;
 
+    real_t Ltot = 0;
+
     if (this->id() == 0)
     {
 
@@ -364,6 +366,14 @@ private:
       real_t Lold = 0;
       gsMatrix<> Uold = m_Force;
       Uold.setZero();
+
+/////////////////////////////////////////////////////////////////////
+
+gsVector<T> Uprev(m_Force.size());
+Uprev.setZero();
+T Lprev = 0;
+
+/////////////////////////////////////////////////////////////////////
 
       gsMatrix<> solVector;
       real_t indicator = 0.0;
@@ -407,6 +417,32 @@ private:
         solVector = m_arcLength->solutionU();
         Uold = solVector;
         Lold = m_arcLength->solutionL();
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        gsMultiPatch<T> mp_def, deformation;
+        m_assembler->constructSolution(m_arcLength->solutionU(),mp_def);
+
+        deformation = mp_def;
+        deformation.patch(0).coefs() -= m_patches.patch(0).coefs();// assuming 1 patch here
+
+        gsVector<T> pt(2);
+        pt.setConstant(0.5);
+
+        gsMatrix<T> def = deformation.patch(0).eval(pt);
+
+        m_assembler->constructSolution(Uprev,mp_def);
+        deformation = mp_def;
+        deformation.patch(0).coefs() -= m_patches.patch(0).coefs();// assuming 1 patch here
+        gsMatrix<T> defold = deformation.patch(0).eval(pt);
+
+        // gsInfo<<"Load factor, Displacement = "<<m_arcLength->solutionL()<<","<<def(2,0)<<"\n";
+        gsInfo<<Ltot<<","<<Ltot + dL<<","<<Lprev<<","<<Uprev.norm()<<","<<defold(2,0)<<","<<m_arcLength->solutionL()<<","<<m_arcLength->solutionU().norm()<<","<<def(2,0)<<"\n";
+        Ltot += dL;
+        Uprev = m_arcLength->solutionU();
+        Lprev = m_arcLength->solutionL();
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         if (!bisected)
         {
@@ -502,7 +538,6 @@ private:
     bool quasiNewton  = false;
     int quasiNewtonInt= -1;
     bool adaptive     = false;
-    int step          = 10;
     int method        = 2; // (0: Load control; 1: Riks' method; 2: Crisfield's method; 3: consistent crisfield method; 4: extended iterations)
     bool deformed     = false;
 
@@ -525,7 +560,6 @@ private:
     std::string opts("options/MGRITsolver_options.xml");
 
     index_t numSteps      = 10;
-    T       tfinal        = 0.1;
         
     gsCmdLine cmd("Arc-length analysis for thin shells.");
 
@@ -542,7 +576,7 @@ private:
     // cmd.addReal("A","relaxation", "Relaxation factor for arc length method", relax);
 
     // cmd.addInt("q","QuasiNewtonInt","Use the Quasi Newton method every INT iterations",quasiNewtonInt);
-    cmd.addInt("N", "maxsteps", "Maximum number of steps", step);
+    cmd.addInt("N", "maxsteps", "Maximum number of steps", numSteps);
 
     cmd.addSwitch("adaptive", "Adaptive length ", adaptive);
     // cmd.addSwitch("quasi", "Use the Quasi Newton method", quasiNewton);
@@ -554,6 +588,8 @@ private:
     cmd.addSwitch("write", "write to file", write);
     
     cmd.getValues(argc,argv);
+
+    T       tfinal        = dL*numSteps;
 
     // Create instance
     gsXBraid_app<T> app(comm, 0.0, tfinal, method, numSteps, numRefine, numElevate, composite,testCase, opts);
@@ -605,12 +641,32 @@ private:
       static_cast<gsXBraidStepStatus&>(status).timeInterval();
     T dL(load.second - load.first);
 
+    // gsDebugVar(dL);
+
     gsMatrix<T> Uold = u_ptr->block(0,0,m_Force.rows(),1);
     T Lold = u_ptr->at(m_Force.rows());
+
+    gsMatrix<T> Uguess = ustop_ptr->block(0,0,m_Force.rows(),1);
+    T Lguess = ustop_ptr->at(m_Force.rows());
+
+    // gsDebugVar(Lold);
+    // gsDebugVar(Uold.norm());
+
+    // gsDebugVar(Lguess);
+    // gsDebugVar(Uguess.norm());
+
+    // gsDebugVar(m_arcLength->solutionU().norm());
+    // gsDebugVar(m_arcLength->solutionL());
+
+    // gsDebugVar(static_cast<gsXBraidStepStatus&>(status).level());
+    // gsDebugVar(load.first);
+    // gsDebugVar(load.second);
 
     m_arcLength->setLength(dL);
     m_arcLength->setSolution(Uold,Lold);
     m_arcLength->resetStep();
+    // if (Uguess.norm()!=0 && Lguess!=0)
+    //   m_arcLength->setInitialGuess(Uguess,Lguess);
 
     m_arcLength->step();
 
@@ -619,7 +675,28 @@ private:
     // } else {
     // }
 
+    u_ptr->block(0,0,m_Force.rows(),1) = m_arcLength->solutionU();
+    u_ptr->at(m_Force.rows()) = m_arcLength->solutionL();
       
+
+    gsMultiPatch<T> mp_def, deformation;
+    m_assembler->constructSolution(m_arcLength->solutionU(),mp_def);
+
+    deformation = mp_def;
+    deformation.patch(0).coefs() -= m_patches.patch(0).coefs();// assuming 1 patch here
+
+    gsVector<T> pt(2);
+    pt.setConstant(0.5);
+
+    gsMatrix<T> def = deformation.patch(0).eval(pt);
+
+    m_assembler->constructSolution(Uold,mp_def);
+    deformation = mp_def;
+    deformation.patch(0).coefs() -= m_patches.patch(0).coefs();// assuming 1 patch here
+    gsMatrix<T> defold = deformation.patch(0).eval(pt);
+
+    gsInfo<<load.first<<","<<load.second<<","<<Lold<<","<<Uold.norm()<<","<<defold(2,0)<<","<<m_arcLength->solutionL()<<","<<m_arcLength->solutionU().norm()<<","<<def(2,0)<<"\n";
+
     // Carry out adaptive refinement in time
     if (static_cast<gsXBraidStepStatus&>(status).level() == 0) {
       braid_Real error = static_cast<gsXBraidStepStatus&>(status).error();
