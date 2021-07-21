@@ -516,7 +516,115 @@ int main (int argc, char** argv)
     }
 
 
+    #ifdef GISMO_WITH_MATPLOTLIB
+        std::vector<real_t> x,y;
 
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        plt::figure(1);
+        plt::title("Solutions per level");
+        for (index_t l = 0; l<=maxLevel; l++)
+        {
+          x.clear(); y.clear();
+          x.resize(solutions[l].size()); y.resize(solutions[l].size());
+
+          for (index_t k = 0; k!=solutions[l].size(); k++)
+          {
+            x[k] = solutions[l].at(k).second.norm();
+            y[k] = solutions[l].at(k).first;
+          }
+          std::string name = "level " + std::to_string(l);
+          plt::named_plot(name,x,y);
+        }
+        plt::xlabel("L");
+        plt::ylabel("|U|");
+        plt::legend();
+        plt::show();
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        plt::figure(2);
+        plt::title("Errors w.r.t level 0");
+        plt::subplot(1,2,1);
+
+        for (index_t l = 1; l<=maxLevel; l++)
+        {
+          x.clear(); y.clear();
+          x.resize(solutions[0].size()); y.resize(solutions[0].size());
+
+          for (index_t k = 0; k!=solutions[0].size(); k++)
+          {
+            x[k] = k;
+            y[k] = (solutions[0].at(k).second - solutions[l].at(k*math::pow(2,l)).second).norm() / solutions[0].at(k).second.norm();
+          }
+          std::string name = "level " + std::to_string(l);
+          plt::named_semilogy(name,x,y);
+        }
+        plt::xlabel("coarse level");
+        plt::ylabel("E_U");
+        plt::legend();
+
+        plt::subplot(1,2,2);
+        for (index_t l = 1; l<=maxLevel; l++)
+        {
+          x.clear(); y.clear();
+          x.resize(solutions[0].size()); y.resize(solutions[0].size());
+
+          for (index_t k = 0; k!=solutions[0].size(); k++)
+          {
+            x[k] = k;
+            y[k] = std::abs(solutions[0].at(k).first  - solutions[l].at(k*math::pow(2,l)).first )/ std::abs(solutions[0].at(k).first);
+          }
+          std::string name = "level " + std::to_string(l);
+          plt::named_semilogy(name,x,y);
+        }
+        plt::xlabel("coarse level");
+        plt::ylabel("E_L");
+        plt::legend();
+
+        plt::show();
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        plt::figure(3);
+        plt::title("Errors w.r.t level L");
+        plt::subplot(1,2,1);
+        for (index_t l = 1; l<=maxLevel; l++)
+        {
+          x.clear(); y.clear();
+          x.resize(solutions[0].size()); y.resize(solutions[0].size());
+
+          for (index_t k = 0; k!=solutions[0].size(); k++)
+          {
+            x[k] = k;
+            y[k] = (solutions[l-1].at(k*math::pow(2,l-1)).second - solutions[l].at(k*math::pow(2,l)).second).norm() / solutions[0].at(k).second.norm();
+          }
+          std::string name = "level " + std::to_string(l);
+          plt::named_semilogy(name,x,y);
+        }
+        plt::xlabel("coarse level");
+        plt::ylabel("E_U");
+        plt::legend();
+
+        plt::subplot(1,2,2);
+        for (index_t l = 1; l<=maxLevel; l++)
+        {
+          x.clear(); y.clear();
+          x.resize(solutions[0].size()); y.resize(solutions[0].size());
+
+          for (index_t k = 0; k!=solutions[0].size(); k++)
+          {
+            x[k] = k;
+            y[k] = std::abs(solutions[l-1].at(k*math::pow(2,l-1)).first  - solutions[l].at(k*math::pow(2,l)).first )/ std::abs(solutions[0].at(k).first);
+          }
+          std::string name = "level " + std::to_string(l);
+          plt::named_semilogy(name,x,y);
+        }
+        plt::xlabel("coarse level");
+        plt::ylabel("E_L");
+        plt::legend();
+
+        plt::show();
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        //plt::save("./poisson2_example.png");
+        Py_Finalize();
+    #endif
 
 
 
