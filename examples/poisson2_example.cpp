@@ -170,6 +170,19 @@ int main(int argc, char *argv[])
     }
     //! [Error and convergence rates]
 
+#ifdef GISMO_WITH_MATPLOTLIB
+    std::vector<real_t> xa(numRefine+1);
+    std::iota(std::begin(xa), std::end(xa), 0);
+
+    plt::title("Convergence rates");
+    plt::named_semilogy("$H^1$ error", xa, h1err);
+    plt::named_semilogy("$L^2$ error", xa, l2err);
+    plt::legend();
+    plt::show();
+    //plt::save("./poisson2_example.png");
+    Py_Finalize();
+#endif
+
     //! [Export visualization in ParaView]
     if (plot)
     {

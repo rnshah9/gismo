@@ -178,6 +178,11 @@ if  (${GISMO_WITH_XBRAID})
 message ("  GISMO_WITH_XBRAID       ${GISMO_WITH_XBRAID}")
 endif()
 
+option(GISMO_WITH_MATPLOTLIB        "With Matplotlibcpp"     false)
+if  (${GISMO_WITH_MATPLOTLIB})
+message ("  GISMO_WITH_MATPLOTLIB   ${GISMO_WITH_MATPLOTLIB}")
+endif()
+
 ## #################################################################
 ## Options list: Extra options
 ## #################################################################
