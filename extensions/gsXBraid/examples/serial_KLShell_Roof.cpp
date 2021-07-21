@@ -533,7 +533,8 @@ int main (int argc, char** argv)
             y[k] = solutions[l].at(k).first;
           }
           std::string name = "level " + std::to_string(l);
-          plt::named_plot(name,x,y);
+          if (l==0){ plt::named_plot(name,x,y,"-o"); }
+          else { plt::named_plot(name,x,y); }
         }
         plt::xlabel("L");
         plt::ylabel("|U|");
