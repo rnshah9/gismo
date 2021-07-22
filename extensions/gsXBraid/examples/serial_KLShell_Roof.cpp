@@ -346,6 +346,7 @@ int main (int argc, char** argv)
     index_t stepi = step; // number of steps for level i
 
     std::vector<std::vector<std::pair<real_t,gsVector<real_t>>>> solutions;
+    std::vector<std::vector<real_t>> errors(maxLevel);
 
     index_t level = 0;
     gsInfo<<"------------------------------------------------------------------------------------\n";
@@ -381,11 +382,13 @@ int main (int argc, char** argv)
     /// Store level solutions
     solutions.push_back(stepSolutions);
 
-
     /// Start new level
-
     for (level = 1; level <= maxLevel; level++)
     {
+      // Resize the error vector for the previous level
+      errors[level-1].resize(solutions[level-1].size());
+
+      // Clear container for step solutions
       stepSolutions.clear();
       // Add the undeformed solution
       tuple.first = L0;
@@ -427,6 +430,8 @@ int main (int argc, char** argv)
           tuple.second = arcLength.solutionU();
           stepSolutions.push_back(tuple);
         }
+
+        errors[level-1].at(p) = ( std::abs(solutions[level-1].at(p+1).first - tuple.first) * Force.norm() + (solutions[level-1].at(p+1).second - tuple.second).norm() ) / dL / (math::pow(2,level-1));
 
         gsInfo<<"Finished.\n";
         // gsInfo<<"* Old solution (lvl,|U|,L) = ("<<level-1<<","<<solutions[level-1].at(p+1).second.norm()<<","<<solutions[level-1].at(p+1).first<<")\n";
@@ -542,6 +547,27 @@ int main (int argc, char** argv)
         plt::show();
         //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         plt::figure(2);
+        plt::title("Errors per level");
+        for (index_t l = 0; l<=maxLevel-1; l++)
+        {
+          x.clear(); y.clear();
+          x.resize(errors[l].size()); y.resize(errors[l].size());
+
+          for (index_t k = 0; k!=errors[l].size(); k++)
+          {
+            x[k] = k;
+            y[k] = errors[l].at(k);
+          }
+          std::string name = "level " + std::to_string(l+1);
+          if (l==0){ plt::named_plot(name,x,y,"-o"); }
+          else { plt::named_plot(name,x,y); }
+        }
+        plt::xlabel("L");
+        plt::ylabel("|U|");
+        plt::legend();
+        plt::show();
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        plt::figure(3);
         plt::title("Errors w.r.t level 0");
         plt::subplot(1,2,1);
 
@@ -582,7 +608,7 @@ int main (int argc, char** argv)
 
         plt::show();
         //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        plt::figure(3);
+        plt::figure(4);
         plt::title("Errors w.r.t level L");
         plt::subplot(1,2,1);
         for (index_t l = 1; l<=maxLevel; l++)
