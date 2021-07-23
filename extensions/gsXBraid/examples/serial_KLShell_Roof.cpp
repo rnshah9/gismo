@@ -53,6 +53,8 @@ int main (int argc, char** argv)
     bool write        = false;
 
     index_t maxit     = 20;
+    // index_t iniLevels  = 2;
+    // index_t maxLevels  = 4;
     index_t maxLevel  = 2;
 
     // Arc length method options
@@ -76,6 +78,8 @@ int main (int argc, char** argv)
 
     cmd.addInt("m","Method", "Arc length method; 1: Crisfield's method; 2: RIks' method.", method);
     cmd.addReal("L","dL", "arc length", dL);
+    // cmd.addInt("I","inilvl", "Initial levels", iniLevels);
+    // cmd.addInt("M","maxlvl", "Max levels", maxLevels);
     cmd.addInt("l","level", "Max level", maxLevel);
     cmd.addReal("A","relaxation", "Relaxation factor for arc length method", relax);
 
@@ -92,6 +96,8 @@ int main (int argc, char** argv)
     cmd.addSwitch("write", "write to file", write);
 
     try { cmd.getValues(argc,argv); } catch (int rv) { return rv; }
+
+    // GISMO_ASSERT(maxLevels>iniLevels,"Max levels must  be more than initial levels!");
 
     gsFileData<> fd(assemberOptionsFile);
     gsOptionList opts;
@@ -328,13 +334,11 @@ int main (int argc, char** argv)
     gsMultiPatch<> deformation = mp;
 
     // Make objects for previous solutions
-    real_t Lold = 0;
-    gsMatrix<> Uold = Force;
-    Uold.setZero();
-
-    real_t L0 = 0;
-    gsMatrix<> U0 = Force;
-    U0.setZero();
+    real_t Lguess,Lold, L0;
+    gsMatrix<> Uguess,Uold, U0;
+    Uold.setZero(Force.size(),1);
+    U0.setZero(Force.size(),1);
+    L0 = Lold = 0.0;
 
     gsMatrix<> solVector;
     real_t indicator = 0.0;
@@ -345,7 +349,16 @@ int main (int argc, char** argv)
 
     index_t stepi = step; // number of steps for level i
 
-    std::vector<std::vector<std::pair<real_t,gsVector<real_t>>>> solutions;
+    /*
+      \a solutions is a container the for each level contains the solutions per point
+      \a points contains all the points across levels in the format (level, U, lambda) -------------------------------> OVERKILL? WHY NEEDED?
+      \a refPoints is a container that contains (level, U, lambda) of the points from which a refinement should START in level+1
+      \a errors is a container that contains the error[l][i] e_i at the ith point of level l
+    */
+    std::vector<std::vector<std::pair<gsVector<real_t>,real_t>>> solutions(maxLevel+1);
+    solutions.reserve(maxLevel+2);
+    std::vector<std::pair<index_t,std::pair<gsVector<real_t> * ,real_t * >>> points;
+    std::vector<std::tuple<index_t,index_t,index_t>> refIdx; // level to compute on, level of start point, index of start point
     std::vector<std::vector<real_t>> errors(maxLevel);
 
     index_t level = 0;
@@ -356,12 +369,9 @@ int main (int argc, char** argv)
     dLi = dL / (math::pow(2,level));
     stepi = step * (math::pow(2,level));
 
-    std::pair<real_t,gsVector<real_t>> tuple;
-    std::vector<std::pair<real_t,gsVector<real_t>>> stepSolutions;
+    std::vector<std::pair<gsVector<real_t>,real_t>> stepSolutions;
     // Add the undeformed solution
-    tuple.first = L0;
-    tuple.second = U0;
-    stepSolutions.push_back(tuple);
+    solutions[level].push_back(std::make_pair(U0,L0));
 
     // Add other solutions
     for (index_t k=0; k<stepi; k++)
@@ -374,26 +384,20 @@ int main (int argc, char** argv)
       if (!(arcLength.converged()))
         GISMO_ERROR("Loop terminated, arc length method did not converge.\n");
 
-      tuple.first  = arcLength.solutionL();
-      tuple.second = arcLength.solutionU();
-      stepSolutions.push_back(tuple);
+      real_t lambda = arcLength.solutionL();
+      solutions[level].push_back(std::make_pair(arcLength.solutionU(),lambda));
     }
 
-    /// Store level solutions
-    solutions.push_back(stepSolutions);
-
+    // TOLERANCE
+    real_t ptol = 0.05;
     /// Start new level
     for (level = 1; level <= maxLevel; level++)
     {
       // Resize the error vector for the previous level
       errors[level-1].resize(solutions[level-1].size());
 
-      // Clear container for step solutions
-      stepSolutions.clear();
       // Add the undeformed solution
-      tuple.first = L0;
-      tuple.second = U0;
-      stepSolutions.push_back(tuple);
+      solutions[level].push_back(std::make_pair(U0,L0));
 
       dLi = dL / (math::pow(2,level));
       stepi = step * (math::pow(2,level));
@@ -406,15 +410,15 @@ int main (int argc, char** argv)
 
       for (index_t p=0; p<solutions[level-1].size()-1; p++)
       {
-        gsInfo<<"Starting from (lvl,|U|,L) = ("<<level-1<<","<<solutions[level-1].at(p).second.norm()<<","<<solutions[level-1].at(p).first<<")\n";
 
-        Lold = solutions[level-1].at(p).first;
-        Uold = solutions[level-1].at(p).second;
+        std::tie(Uold,Lold) = solutions[level-1].at(p);
+        gsInfo<<"Starting from (lvl,|U|,L) = ("<<level-1<<","<<Uold.norm()<<","<<Lold<<")\n";
 
         arcLength.setSolution(Uold,Lold);
         arcLength.resetStep();
 
-        arcLength.setInitialGuess(solutions[level-1].at(p+1).second,solutions[level-1].at(p+1).first);
+        std::tie(Uguess,Lguess) = solutions[level-1].at(p+1);
+        arcLength.setInitialGuess(Uguess,Lguess);
 
         for (index_t k=0; k<2; k++)
         {
@@ -426,12 +430,21 @@ int main (int argc, char** argv)
           if (!(arcLength.converged()))
             GISMO_ERROR("Loop terminated, arc length method did not converge.\n");
 
-          tuple.first  = arcLength.solutionL();
-          tuple.second = arcLength.solutionU();
-          stepSolutions.push_back(tuple);
+          real_t lambda = arcLength.solutionL();
+          solutions[level].push_back(std::make_pair(arcLength.solutionU(),lambda));
         }
 
-        errors[level-1].at(p) = ( std::abs(solutions[level-1].at(p+1).first - tuple.first) * Force.norm() + (solutions[level-1].at(p+1).second - tuple.second).norm() ) / dL / (math::pow(2,level-1));
+        errors[level-1].at(p) = ( std::abs(solutions[level-1].at(p+1).second - arcLength.solutionL()) * Force.norm() + (solutions[level-1].at(p+1).first - arcLength.solutionU()).norm() ) / dLi;
+
+        // Store as 'refinement points' the points that are on the current level and do not satisfy the error
+        if (errors[level-1].at(p) > ptol)
+        {
+          gsInfo<<"(lvl,|U|,L) = "<<level<<","<<solutions[level-1].at(p).first.norm()<<","<<solutions[level-1].at(p).second<<") has error "<<errors[level-1].at(p)<<"\n";
+          refIdx.push_back({level+1,level-1,p}); // start point of the current interval
+          refIdx.push_back({level+1,level,solutions[level].size()-2}); //  mid point of the current interval
+          gsInfo<<"point "<<solutions[level].size()-3<<" of level "<<level<<" added to refIdx\n";
+          gsInfo<<"point "<<solutions[level].size()-2<<" of level "<<level<<" added to refIdx\n";
+        }
 
         gsInfo<<"Finished.\n";
         // gsInfo<<"* Old solution (lvl,|U|,L) = ("<<level-1<<","<<solutions[level-1].at(p+1).second.norm()<<","<<solutions[level-1].at(p+1).first<<")\n";
@@ -448,82 +461,91 @@ int main (int argc, char** argv)
       solutions.push_back(stepSolutions);
     }
 
+    // Store the solutions in points
+    for (index_t level =0; level<=maxLevel; ++level)
+      for (index_t p = 0; p!=solutions[level].size(); ++p)
+        points.push_back(std::make_pair(level,std::make_pair(&solutions[level].at(p).first,&solutions[level].at(p).second)));
 
-    gsInfo<<"------------------------------------------------------------------------------------\n";
-    gsInfo<<"\t\t\tSolutions\n";
-    gsInfo<<"------------------------------------------------------------------------------------\n";
 
-    for (index_t l = 0; l<= maxLevel; l++) { std::cout<<std::setw(16)<<std::left<<"level"<<std::setw(16)<<l; }
-    gsInfo<<"\n";
-    for (index_t l = 0; l<= maxLevel; l++) { std::cout<<std::setw(16)<<std::left<<"|U|"  <<std::setw(16)<<"L"; }
-    gsInfo<<"\n";
-
-    for (index_t k = 0; k != solutions[maxLevel].size(); k++)
+    /// Refine
+    gsDebugVar(refIdx.size());
+    while (refIdx.size() != 0)
     {
-      for (index_t l = 0; l<= maxLevel; l++)
+      index_t level, reflevel, pindex;
+      // Get level and index of refinement point
+      std::tie(level,reflevel,pindex) = *refIdx.begin();
+
+
+      gsDebugVar(level);
+      gsDebugVar(reflevel);
+      gsDebugVar(pindex);
+
+      // Erase refinement index
+      refIdx.erase(refIdx.begin());
+      gsDebugVar(refIdx.size());
+
+      // Check if the solutions object has already stored points at level
+      if (solutions.size()-1 < level)
       {
-        if ((k % static_cast<index_t>(math::pow(2,maxLevel-l)) )==0)
-        {
-          std::cout<<std::setw(16)<<std::left<<solutions[l].at(k/math::pow(2,maxLevel-l)).second.norm();
-          std::cout<<std::setw(16)<<std::left<<solutions[l].at(k/math::pow(2,maxLevel-l)).first;
-        }
-        else
-        {
-          std::cout<<std::setw(16)<<std::left<<"NA";
-          std::cout<<std::setw(16)<<std::left<<"NA";
-        }
+        gsDebug<<"solutions stores "<<level+1<<" levels.";
+        solutions.resize(level+1);
       }
-      gsInfo<<"\n";
-    }
-
-    gsInfo<<"------------------------------------------------------------------------------------\n";
-    gsInfo<<"\t\t\tErrors (E_U = |U_{0} - U_{l}| / U_{0}, E_L = |L_{0} - L_{l}| / L_{0})\n";
-    gsInfo<<"------------------------------------------------------------------------------------\n";
-
-
-    for (index_t l = 0; l<= maxLevel; l++) { std::cout<<std::setw(16)<<std::left<<"level"<<std::setw(16)<<l; }
-    gsInfo<<"\n";
-    for (index_t l = 0; l<= maxLevel; l++) { std::cout<<std::setw(16)<<std::left<<"E_U"  <<std::setw(16)<<"E_L"; }
-    gsInfo<<"\n";
-
-    for (index_t k = 0; k != solutions[0].size(); k++)
-    {
-      std::cout<<std::setw(16)<<std::left<<"NA";
-      std::cout<<std::setw(16)<<std::left<<"NA";
-      for (index_t l = 1; l<= maxLevel; l++)
+      // Check if the errors object has already stored points at level
+      gsDebugVar(errors.size());
+      if (errors.size()-1 < level-1)
       {
-        std::cout<<std::setw(16)<<std::left<<(solutions[0].at(k).second - solutions[l].at(k*math::pow(2,l)).second).norm() / solutions[0].at(k).second.norm();
-        std::cout<<std::setw(16)<<std::left<<std::abs(solutions[0].at(k).first  - solutions[l].at(k*math::pow(2,l)).first )/ std::abs(solutions[0].at(k).first);
+        gsDebug<<"errors stores "<<level<<" levels.";
+        errors.resize(level);
       }
-      gsInfo<<"\n";
-    }
 
-    gsInfo<<"------------------------------------------------------------------------------------\n";
-    gsInfo<<"\t\t\tErrors (E_U = |U_{l-1} - U_{l}| / U_{0}, E_L = |L_{l-1} - L_{l}| / L_{0})\n";
-    gsInfo<<"------------------------------------------------------------------------------------\n";
+      // Get starting point
+      std::tie(Uold,Lold) = solutions[reflevel].at(pindex);
+      gsInfo<<"Starting from (lvl,|U|,L) = ("<<reflevel<<","<<Uold.norm()<<","<<Lold<<")\n";
+      arcLength.setSolution(Uold,Lold);
+      arcLength.resetStep();
 
+      solutions[level+1].push_back(std::make_pair(Uold,Lold));
 
-    for (index_t l = 0; l<= maxLevel; l++) { std::cout<<std::setw(16)<<std::left<<"level"<<std::setw(16)<<l; }
-    gsInfo<<"\n";
-    for (index_t l = 0; l<= maxLevel; l++) { std::cout<<std::setw(16)<<std::left<<"E_U"  <<std::setw(16)<<"E_L"; }
-    gsInfo<<"\n";
+      // Get initial guess
+      std::tie(Uguess,Lguess) = solutions[reflevel].at(pindex+1);
+      arcLength.setInitialGuess(Uguess,Lguess);
 
-    for (index_t k = 0; k != solutions[0].size(); k++)
-    {
-      std::cout<<std::setw(16)<<std::left<<"NA";
-      std::cout<<std::setw(16)<<std::left<<"NA";
-      for (index_t l = 1; l<= maxLevel; l++)
+      // Set arc-length size
+      dLi = dL / (math::pow(2,level));
+
+      arcLength.setLength(dLi);
+      for (index_t k=0; k<2; k++)
       {
-        std::cout<<std::setw(16)<<std::left<<(solutions[l-1].at(k*math::pow(2,l-1)).second - solutions[l].at(k*math::pow(2,l)).second).norm() / solutions[0].at(k).second.norm();
-        std::cout<<std::setw(16)<<std::left<<std::abs(solutions[l-1].at(k*math::pow(2,l-1)).first  - solutions[l].at(k*math::pow(2,l)).first )/ std::abs(solutions[0].at(k).first);
+        gsInfo<<"Load step "<< k<<"\t"<<"dL = "<<dLi<<"\n";
+        // assembler->constructSolution(solVector,solution);
+        arcLength.step();
+
+        // gsInfo<<"m_U = "<<arcLength.solutionU()<<"\n";
+        if (!(arcLength.converged()))
+          GISMO_ERROR("Loop terminated, arc length method did not converge.\n");
+
+        real_t lambda = arcLength.solutionL();
+
+        solutions[level+1].push_back(std::make_pair(arcLength.solutionU(),lambda));
+        points.push_back(std::make_pair(level+1,std::make_pair(&solutions[level+1].at(solutions.size()-1).first,&solutions[level+1].at(solutions.size()-1).second)));
       }
-      gsInfo<<"\n";
+
+      gsDebugVar(solutions[reflevel].at(pindex+1).second);
+      errors[level].at(pindex) = ( std::abs(solutions[level].at(pindex+1).second - arcLength.solutionL()) * Force.norm() + (solutions[level].at(pindex+1).first - arcLength.solutionU()).norm() ) / dLi;
+
+      // Store as 'refinement points' the points that
+      if (errors[level].at(pindex) > ptol)
+      {
+        // gsInfo<<"(lvl,|U|,L) = "<<level<<","<<solutions[level].at(pindex).first.norm()<<","<<solutions[level].at(pindex).second<<") has error "<<errors[level].at(pindex)<<"\n";
+        // refIdx.push_back({level+1,level,pindex});
+      }
+
     }
 
 
     #ifdef GISMO_WITH_MATPLOTLIB
         std::vector<real_t> x,y;
-
+        std::string name;
         //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         plt::figure(1);
         plt::title("Solutions per level");
@@ -534,122 +556,50 @@ int main (int argc, char** argv)
 
           for (index_t k = 0; k!=solutions[l].size(); k++)
           {
-            x[k] = solutions[l].at(k).second.norm();
-            y[k] = solutions[l].at(k).first;
+            x[k] = solutions[l].at(k).first.norm();
+            y[k] = solutions[l].at(k).second;
           }
-          std::string name = "level " + std::to_string(l);
-          if (l==0){ plt::named_plot(name,x,y,"-o"); }
-          else { plt::named_plot(name,x,y); }
+          name = "level " + std::to_string(l);
+          if (l==0){ plt::named_plot(name,x,y,"o"); }
+          else { plt::named_plot(name,x,y,"o"); }
         }
         plt::xlabel("L");
         plt::ylabel("|U|");
         plt::legend();
-        plt::show();
         //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         plt::figure(2);
-        plt::title("Errors per level");
-        for (index_t l = 0; l<=maxLevel-1; l++)
-        {
-          x.clear(); y.clear();
-          x.resize(errors[l].size()); y.resize(errors[l].size());
+        plt::title("Solution path");
+        x.clear(); y.clear();
+        x.resize(points.size()); y.resize(points.size());
 
-          for (index_t k = 0; k!=errors[l].size(); k++)
-          {
-            x[k] = k;
-            y[k] = errors[l].at(k);
-          }
-          std::string name = "level " + std::to_string(l+1);
-          if (l==0){ plt::named_plot(name,x,y,"-o"); }
-          else { plt::named_plot(name,x,y); }
+        for (index_t k = 0; k!=points.size(); k++)
+        {
+          x[k] = points.at(k).second.first->norm();
+          y[k] = *(points.at(k).second.second);
         }
+        name = "solution ";
+        plt::named_plot(name,x,y,"o");
+
+        x.clear(); y.clear();
+        x.resize(refIdx.size()); y.resize(refIdx.size());
+
+        index_t lvl,reflvl;
+        index_t idx;
+        for (index_t k = 0; k!=refIdx.size(); k++)
+        {
+          std::tie(reflvl,level,idx) = refIdx[k];
+          x[k] = solutions[lvl].at(idx).first.norm();
+          y[k] = solutions[lvl].at(idx).second;
+        }
+        name = "refinement points ";
+        plt::named_plot(name,x,y,"o");
+
         plt::xlabel("L");
         plt::ylabel("|U|");
         plt::legend();
-        plt::show();
         //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        plt::figure(3);
-        plt::title("Errors w.r.t level 0");
-        plt::subplot(1,2,1);
-
-        for (index_t l = 1; l<=maxLevel; l++)
-        {
-          x.clear(); y.clear();
-          x.resize(solutions[0].size()); y.resize(solutions[0].size());
-
-          for (index_t k = 0; k!=solutions[0].size(); k++)
-          {
-            x[k] = k;
-            y[k] = (solutions[0].at(k).second - solutions[l].at(k*math::pow(2,l)).second).norm() / solutions[0].at(k).second.norm();
-          }
-          std::string name = "level " + std::to_string(l);
-          plt::named_semilogy(name,x,y);
-        }
-        plt::xlabel("coarse level");
-        plt::ylabel("E_U");
-        plt::legend();
-
-        plt::subplot(1,2,2);
-        for (index_t l = 1; l<=maxLevel; l++)
-        {
-          x.clear(); y.clear();
-          x.resize(solutions[0].size()); y.resize(solutions[0].size());
-
-          for (index_t k = 0; k!=solutions[0].size(); k++)
-          {
-            x[k] = k;
-            y[k] = std::abs(solutions[0].at(k).first  - solutions[l].at(k*math::pow(2,l)).first )/ std::abs(solutions[0].at(k).first);
-          }
-          std::string name = "level " + std::to_string(l);
-          plt::named_semilogy(name,x,y);
-        }
-        plt::xlabel("coarse level");
-        plt::ylabel("E_L");
-        plt::legend();
-
-        plt::show();
-        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        plt::figure(4);
-        plt::title("Errors w.r.t level L");
-        plt::subplot(1,2,1);
-        for (index_t l = 1; l<=maxLevel; l++)
-        {
-          x.clear(); y.clear();
-          x.resize(solutions[0].size()); y.resize(solutions[0].size());
-
-          for (index_t k = 0; k!=solutions[0].size(); k++)
-          {
-            x[k] = k;
-            y[k] = (solutions[l-1].at(k*math::pow(2,l-1)).second - solutions[l].at(k*math::pow(2,l)).second).norm() / solutions[0].at(k).second.norm();
-          }
-          std::string name = "level " + std::to_string(l);
-          plt::named_semilogy(name,x,y);
-        }
-        plt::xlabel("coarse level");
-        plt::ylabel("E_U");
-        plt::legend();
-
-        plt::subplot(1,2,2);
-        for (index_t l = 1; l<=maxLevel; l++)
-        {
-          x.clear(); y.clear();
-          x.resize(solutions[0].size()); y.resize(solutions[0].size());
-
-          for (index_t k = 0; k!=solutions[0].size(); k++)
-          {
-            x[k] = k;
-            y[k] = std::abs(solutions[l-1].at(k*math::pow(2,l-1)).first  - solutions[l].at(k*math::pow(2,l)).first )/ std::abs(solutions[0].at(k).first);
-          }
-          std::string name = "level " + std::to_string(l);
-          plt::named_semilogy(name,x,y);
-        }
-        plt::xlabel("coarse level");
-        plt::ylabel("E_L");
-        plt::legend();
-
-        plt::show();
-        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
         //plt::save("./poisson2_example.png");
+        plt::show();
         Py_Finalize();
     #endif
 
