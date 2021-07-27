@@ -24,7 +24,7 @@ template <class T>
 void initStepOutput( const std::string name, const gsMatrix<T> & points);
 
 template <class T>
-void writeStepOutput(const gsArcLengthIterator<T> & arcLength, const gsMultiPatch<T> & deformation, const std::string name, const gsMatrix<T> & points, const index_t extreme=-1, const index_t kmax=100);
+void writeStepOutput(const T lambda, const gsMultiPatch<T> & deformation, const std::string name, const gsMatrix<T> & points, const index_t extreme=-1, const index_t kmax=100);
 
 int main (int argc, char** argv)
 {
@@ -198,7 +198,8 @@ int main (int argc, char** argv)
 
     dirname = dirname + "/" +  "Roof_t="+ std::to_string(thickness) + "-r=" + std::to_string(numHref) + "-e" + std::to_string(numElevate) +"_solution";
     output =  "solution";
-    wn = output + "data.txt";
+    wn = "data.txt";
+    std::string line = "line.txt";
 
     std::string commands = "mkdir -p " + dirname;
     const char *command = commands.c_str();
@@ -209,7 +210,10 @@ int main (int argc, char** argv)
       gsWriteParaview(mp,dirname + "/" + "mp",1000,mesh);
 
     if (write)
+    {
       initStepOutput(dirname + "/" + wn, writePoints);
+      initStepOutput(dirname + "/" + line, writePoints);
+    }
 
     // Initialise solution object
     gsMultiPatch<> mp_def = mp;
@@ -327,10 +331,6 @@ int main (int argc, char** argv)
     arcLength.initialize();
 
 
-    gsParaviewCollection collection(dirname + "/" + output);
-    gsParaviewCollection Smembrane(dirname + "/" + "membrane");
-    gsParaviewCollection Sflexural(dirname + "/" + "flexural");
-    gsParaviewCollection Smembrane_p(dirname + "/" + "membrane_p");
     gsMultiPatch<> deformation = mp;
 
     // Make objects for previous solutions
@@ -461,161 +461,283 @@ int main (int argc, char** argv)
       solutions.push_back(stepSolutions);
     }
 
-    // Store the solutions in points
-    for (index_t level =0; level<=maxLevel; ++level)
-      for (index_t p = 0; p!=solutions[level].size(); ++p)
-        points.push_back(std::make_pair(level,std::make_pair(&solutions[level].at(p).first,&solutions[level].at(p).second)));
+    // // Store the solutions in points
+    // for (index_t level =0; level<=maxLevel; ++level)
+    //   for (index_t p = 0; p!=solutions[level].size(); ++p)
+    //     points.push_back(std::make_pair(level,std::make_pair(&solutions[level].at(p).first,&solutions[level].at(p).second)));
 
 
-    /// Refine
-    gsDebugVar(refIdx.size());
-    while (refIdx.size() != 0)
+    // /// Refine
+    // gsDebugVar(refIdx.size());
+    // while (refIdx.size() != 0)
+    // {
+    //   index_t level, reflevel, pindex;
+    //   // Get level and index of refinement point
+    //   std::tie(level,reflevel,pindex) = *refIdx.begin();
+
+
+    //   gsDebugVar(level);
+    //   gsDebugVar(reflevel);
+    //   gsDebugVar(pindex);
+
+    //   // Erase refinement index
+    //   refIdx.erase(refIdx.begin());
+    //   gsDebugVar(refIdx.size());
+
+    //   // Check if the solutions object has already stored points at level
+    //   if (solutions.size()-1 < level)
+    //   {
+    //     gsDebug<<"solutions stores "<<level+1<<" levels.";
+    //     solutions.resize(level+1);
+    //   }
+    //   // Check if the errors object has already stored points at level
+    //   gsDebugVar(errors.size());
+    //   if (errors.size()-1 < level-1)
+    //   {
+    //     gsDebug<<"errors stores "<<level<<" levels.";
+    //     errors.resize(level);
+    //   }
+
+    //   // Get starting point
+    //   std::tie(Uold,Lold) = solutions[reflevel].at(pindex);
+    //   gsInfo<<"Starting from (lvl,|U|,L) = ("<<reflevel<<","<<Uold.norm()<<","<<Lold<<")\n";
+    //   arcLength.setSolution(Uold,Lold);
+    //   arcLength.resetStep();
+
+    //   solutions[level+1].push_back(std::make_pair(Uold,Lold));
+
+    //   // Get initial guess
+    //   std::tie(Uguess,Lguess) = solutions[reflevel].at(pindex+1);
+    //   arcLength.setInitialGuess(Uguess,Lguess);
+
+    //   // Set arc-length size
+    //   dLi = dL / (math::pow(2,level));
+
+    //   arcLength.setLength(dLi);
+    //   for (index_t k=0; k<2; k++)
+    //   {
+    //     gsInfo<<"Load step "<< k<<"\t"<<"dL = "<<dLi<<"\n";
+    //     // assembler->constructSolution(solVector,solution);
+    //     arcLength.step();
+
+    //     // gsInfo<<"m_U = "<<arcLength.solutionU()<<"\n";
+    //     if (!(arcLength.converged()))
+    //       GISMO_ERROR("Loop terminated, arc length method did not converge.\n");
+
+    //     real_t lambda = arcLength.solutionL();
+
+    //     solutions[level+1].push_back(std::make_pair(arcLength.solutionU(),lambda));
+    //     points.push_back(std::make_pair(level+1,std::make_pair(&solutions[level+1].at(solutions.size()-1).first,&solutions[level+1].at(solutions.size()-1).second)));
+    //   }
+
+    //   gsDebugVar(solutions[reflevel].at(pindex+1).second);
+    //   errors[level].at(pindex) = ( std::abs(solutions[level].at(pindex+1).second - arcLength.solutionL()) * Force.norm() + (solutions[level].at(pindex+1).first - arcLength.solutionU()).norm() ) / dLi;
+
+    //   // Store as 'refinement points' the points that
+    //   if (errors[level].at(pindex) > ptol)
+    //   {
+    //     // gsInfo<<"(lvl,|U|,L) = "<<level<<","<<solutions[level].at(pindex).first.norm()<<","<<solutions[level].at(pindex).second<<") has error "<<errors[level].at(pindex)<<"\n";
+    //     // refIdx.push_back({level+1,level,pindex});
+    //   }
+
+    // }
+
+
+    if(plot)
     {
-      index_t level, reflevel, pindex;
-      // Get level and index of refinement point
-      std::tie(level,reflevel,pindex) = *refIdx.begin();
-
-
-      gsDebugVar(level);
-      gsDebugVar(reflevel);
-      gsDebugVar(pindex);
-
-      // Erase refinement index
-      refIdx.erase(refIdx.begin());
-      gsDebugVar(refIdx.size());
-
-      // Check if the solutions object has already stored points at level
-      if (solutions.size()-1 < level)
+#ifdef GISMO_WITH_MATPLOTLIB
+      std::vector<real_t> x,y;
+      std::string name;
+      //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      plt::figure(1);
+      plt::title("Solutions per level");
+      for (index_t l = 0; l<=maxLevel; l++)
       {
-        gsDebug<<"solutions stores "<<level+1<<" levels.";
-        solutions.resize(level+1);
+        x.clear(); y.clear();
+        x.resize(solutions[l].size()); y.resize(solutions[l].size());
+
+        for (index_t k = 0; k!=solutions[l].size(); k++)
+        {
+          x[k] = solutions[l].at(k).first.norm();
+          y[k] = solutions[l].at(k).second;
+        }
+        name = "level " + std::to_string(l);
+        if (l==0){ plt::named_plot(name,x,y,"o"); }
+        else { plt::named_plot(name,x,y,"o"); }
       }
-      // Check if the errors object has already stored points at level
-      gsDebugVar(errors.size());
-      if (errors.size()-1 < level-1)
+      plt::xlabel("L");
+      plt::ylabel("|U|");
+      plt::legend();
+      //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      plt::figure(2);
+      plt::title("Solution path");
+      x.clear(); y.clear();
+      x.resize(points.size()); y.resize(points.size());
+
+      for (index_t k = 0; k!=points.size(); k++)
       {
-        gsDebug<<"errors stores "<<level<<" levels.";
-        errors.resize(level);
+        x[k] = points.at(k).second.first->norm();
+        y[k] = *(points.at(k).second.second);
       }
+      name = "solution ";
+      plt::named_plot(name,x,y,"o");
 
-      // Get starting point
-      std::tie(Uold,Lold) = solutions[reflevel].at(pindex);
-      gsInfo<<"Starting from (lvl,|U|,L) = ("<<reflevel<<","<<Uold.norm()<<","<<Lold<<")\n";
-      arcLength.setSolution(Uold,Lold);
-      arcLength.resetStep();
+      x.clear(); y.clear();
+      x.resize(refIdx.size()); y.resize(refIdx.size());
 
-      solutions[level+1].push_back(std::make_pair(Uold,Lold));
-
-      // Get initial guess
-      std::tie(Uguess,Lguess) = solutions[reflevel].at(pindex+1);
-      arcLength.setInitialGuess(Uguess,Lguess);
-
-      // Set arc-length size
-      dLi = dL / (math::pow(2,level));
-
-      arcLength.setLength(dLi);
-      for (index_t k=0; k<2; k++)
+      index_t lvl,reflvl;
+      index_t idx;
+      for (index_t k = 0; k!=refIdx.size(); k++)
       {
-        gsInfo<<"Load step "<< k<<"\t"<<"dL = "<<dLi<<"\n";
-        // assembler->constructSolution(solVector,solution);
-        arcLength.step();
-
-        // gsInfo<<"m_U = "<<arcLength.solutionU()<<"\n";
-        if (!(arcLength.converged()))
-          GISMO_ERROR("Loop terminated, arc length method did not converge.\n");
-
-        real_t lambda = arcLength.solutionL();
-
-        solutions[level+1].push_back(std::make_pair(arcLength.solutionU(),lambda));
-        points.push_back(std::make_pair(level+1,std::make_pair(&solutions[level+1].at(solutions.size()-1).first,&solutions[level+1].at(solutions.size()-1).second)));
+        std::tie(reflvl,level,idx) = refIdx[k];
+        x[k] = solutions[lvl].at(idx).first.norm();
+        y[k] = solutions[lvl].at(idx).second;
       }
+      name = "refinement points ";
+      plt::named_plot(name,x,y,"o");
 
-      gsDebugVar(solutions[reflevel].at(pindex+1).second);
-      errors[level].at(pindex) = ( std::abs(solutions[level].at(pindex+1).second - arcLength.solutionL()) * Force.norm() + (solutions[level].at(pindex+1).first - arcLength.solutionU()).norm() ) / dLi;
-
-      // Store as 'refinement points' the points that
-      if (errors[level].at(pindex) > ptol)
-      {
-        // gsInfo<<"(lvl,|U|,L) = "<<level<<","<<solutions[level].at(pindex).first.norm()<<","<<solutions[level].at(pindex).second<<") has error "<<errors[level].at(pindex)<<"\n";
-        // refIdx.push_back({level+1,level,pindex});
-      }
-
+      plt::xlabel("L");
+      plt::ylabel("|U|");
+      plt::legend();
+      //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      //plt::save("./poisson2_example.png");
+      plt::show();
+      Py_Finalize();
+#else
+      gsInfo<<"Matplotlib is not compiled. Please run cmake with -DGISMO_WITH_MATPLOTLIB=ON."
+#endif
     }
 
 
-    #ifdef GISMO_WITH_MATPLOTLIB
-        std::vector<real_t> x,y;
-        std::string name;
-        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        plt::figure(1);
-        plt::title("Solutions per level");
-        for (index_t l = 0; l<=maxLevel; l++)
-        {
-          x.clear(); y.clear();
-          x.resize(solutions[l].size()); y.resize(solutions[l].size());
+  /*
 
-          for (index_t k = 0; k!=solutions[l].size(); k++)
-          {
-            x[k] = solutions[l].at(k).first.norm();
-            y[k] = solutions[l].at(k).second;
-          }
-          name = "level " + std::to_string(l);
-          if (l==0){ plt::named_plot(name,x,y,"o"); }
-          else { plt::named_plot(name,x,y,"o"); }
-        }
-        plt::xlabel("L");
-        plt::ylabel("|U|");
-        plt::legend();
-        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        plt::figure(2);
-        plt::title("Solution path");
-        x.clear(); y.clear();
-        x.resize(points.size()); y.resize(points.size());
-
-        for (index_t k = 0; k!=points.size(); k++)
-        {
-          x[k] = points.at(k).second.first->norm();
-          y[k] = *(points.at(k).second.second);
-        }
-        name = "solution ";
-        plt::named_plot(name,x,y,"o");
-
-        x.clear(); y.clear();
-        x.resize(refIdx.size()); y.resize(refIdx.size());
-
-        index_t lvl,reflvl;
-        index_t idx;
-        for (index_t k = 0; k!=refIdx.size(); k++)
-        {
-          std::tie(reflvl,level,idx) = refIdx[k];
-          x[k] = solutions[lvl].at(idx).first.norm();
-          y[k] = solutions[lvl].at(idx).second;
-        }
-        name = "refinement points ";
-        plt::named_plot(name,x,y,"o");
-
-        plt::xlabel("L");
-        plt::ylabel("|U|");
-        plt::legend();
-        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        //plt::save("./poisson2_example.png");
-        plt::show();
-        Py_Finalize();
-    #endif
+    ONLY FITTING LEVEL 0 BASIS!
 
 
 
+   */
+
+  // Prepare fitting basis
+  gsKnotVector<> kv(0,1,step-1,2,1);
+
+  // gsBSplineBasis<real_t> lbasis(kv);
+
+  // for (index_t p = 0; p!=dbasis.nBases(); ++p)
+  // {
+    gsTensorBSplineBasis<3,real_t> tbasis(
+                                            // dbasis.basis(0).knots(0),
+                                            // dbasis.basis(0).knots(1)//,
+                                            static_cast<gsBSplineBasis<real_t> *>(&dbasis.basis(0).component(0))->knots(),
+                                            static_cast<gsBSplineBasis<real_t> *>(&dbasis.basis(0).component(1))->knots(),
+                                            kv
+                                            );
+  // }
+
+  index_t blocksize = mp.patch(0).coefs().rows();
+  gsMatrix<> coefs((step+1)*blocksize,4);
+  gsVector<> ones;
+  ones.setOnes(blocksize);
+
+  gsMultiPatch<> mp_tmp;
+
+  for (index_t lam = 0; lam!=step+1; ++lam)
+  {
+    assembler->constructSolution(solutions[0].at(lam).first,mp_tmp);
+    coefs.block(lam * blocksize,0,blocksize,3) = mp_tmp.patch(0).coefs();
+    coefs.block(lam * blocksize,3,blocksize,1) = solutions[0].at(lam).second * ones;
+  }
 
 
+  // gsTensorBSpline<3,real_t> tspline = tbasis.makeGeometry(give(coefs)).release();
+  gsTensorBSpline<3,real_t> tspline(tbasis,give(coefs));
 
 
+  ///////// Elevate in one direction
+
+  /// Make refined basis
+  gsKnotVector<> kv2(0,1,step-1,2,1);
+  gsTensorBSplineBasis<3,real_t> tbasis2(
+                                          // dbasis.basis(0).knots(0),
+                                          // dbasis.basis(0).knots(1)//,
+                                          static_cast<gsBSplineBasis<real_t> *>(&dbasis.basis(0).component(0))->knots(),
+                                          static_cast<gsBSplineBasis<real_t> *>(&dbasis.basis(0).component(1))->knots(),
+                                          kv2
+                                          );
+
+  gsQuasiInterpolate<real_t>::localIntpl(tbasis2, tspline, coefs);
+
+  gsTensorBSpline<3,real_t> tspline2(tbasis2,give(coefs));
+
+  /////////////////////////////////////
 
 
+  typename gsTensorBSpline<3,real_t>::BoundaryGeometryType target;
 
+  gsParaviewCollection collection(dirname + "/" + output);
 
+  gsField<> solField;
 
+  if (plot || write)
+  {
+    gsVector<> xi;
+    xi.setLinSpaced(100,0,0.9999);
 
+    for (index_t k = 0; k!=xi.size(); k++)
+    {
+      tspline2.slice(2,xi.at(k),target);
+      gsGeometry<real_t> * slice = target.clone().release();
+      real_t lambda = slice->coefs()(0,3);
+      slice->embed(3);
 
+      deformation.patch(0) = *slice;
+      deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
+
+      if (plot)
+      {
+        solField = gsField<>(mp,deformation);
+        gsWriteParaview(solField,"slice");
+
+        std::string fileName = dirname + "/" + output + util::to_string(k);
+        gsWriteParaview<>(solField, fileName, 1000,mesh);
+        fileName = output + util::to_string(k) + "0";
+        collection.addTimestep(fileName,k,".vts");
+        if (mesh) collection.addTimestep(fileName,k,"_mesh.vtp");
+      }
+      if (write)
+      {
+          writeStepOutput(lambda,deformation, dirname + "/" + line, writePoints,1, 201);
+      }
+    }
+
+    for (index_t k = 0; k!=solutions[0].size(); k++)
+    {
+      assembler->constructSolution(solutions[0].at(k).first,mp_tmp);
+      real_t lambda = solutions[0].at(k).second;
+
+      deformation.patch(0) = mp_tmp.patch(0);
+      deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
+
+      if (plot)
+      {
+        solField = gsField<>(mp,deformation);
+        gsWriteParaview(solField,"slice");
+
+        std::string fileName = dirname + "/" + output + util::to_string(k);
+        gsWriteParaview<>(solField, fileName, 1000,mesh);
+        fileName = output + util::to_string(k) + "0";
+        collection.addTimestep(fileName,k,".vts");
+        if (mesh) collection.addTimestep(fileName,k,"_mesh.vtp");
+      }
+      if (write)
+      {
+          writeStepOutput(lambda,deformation, dirname + "/" + wn, writePoints,1, 201);
+      }
+    }
+
+  if (plot)
+    collection.save();
+
+  }
 
 /*
 
@@ -689,301 +811,7 @@ if (write)
 
 */
 
-
-
-
-
-    if (plot)
-    {
-      collection.save();
-      Smembrane.save();
-      Sflexural.save();
-      Smembrane_p.save();
-    }
-
   return result;
-}
-
-template <class T>
-gsMultiPatch<T> RectangularDomain(int n, int p, T L, T B, bool clamped, T clampoffset)
-{
-  gsMultiPatch<T> mp = RectangularDomain(n, n, p, p, L, B, clamped, clampoffset);
-  return mp;
-}
-
-template <class T>
-gsMultiPatch<T> RectangularDomain(int n, int m, int p, int q, T L, T B, bool clamped, T clampoffset)
-{
-  // -------------------------------------------------------------------------
-  // --------------------------Make beam geometry-----------------------------
-  // -------------------------------------------------------------------------
-  int dim = 3; //physical dimension
-  gsKnotVector<> kv0;
-  kv0.initUniform(0,1,0,p+1,1);
-  gsKnotVector<> kv1;
-  kv1.initUniform(0,1,0,q+1,1);
-
-  for(index_t i = 0; i< n; ++i)
-      kv0.uniformRefine();
-  for(index_t i = 0; i< m; ++i)
-      kv1.uniformRefine();
-
-  if (clamped)
-  {
-    T knotval;
-    knotval = kv0.uValue(1);
-    kv0.insert(std::min(clampoffset,knotval/2.));
-
-    knotval = kv0.uValue(kv0.uSize()-2);
-    kv0.insert(std::max(1-clampoffset,knotval/2.));
-  }
-
-  // Make basis
-  gsTensorBSplineBasis<2,T> basis(kv0,kv1);
-
-  // Initiate coefficient matrix
-  gsMatrix<> coefs(basis.size(),dim);
-  // Number of control points needed per component
-  size_t len0 = basis.component(0).size();
-  size_t len1 = basis.component(1).size();
-  gsVector<> coefvec0(len0);
-  // Uniformly distribute control points per component
-  coefvec0.setLinSpaced(len0,0.0,L);
-  gsVector<> coefvec1(basis.component(1).size());
-  coefvec1.setLinSpaced(len1,0.0,B);
-
-  // Z coordinate is zero
-  coefs.col(2).setZero();
-
-  // Define a matrix with ones
-  gsVector<> temp(len0);
-  temp.setOnes();
-  for (index_t k = 0; k < len1; k++)
-  {
-    // First column contains x-coordinates (length)
-    coefs.col(0).segment(k*len0,len0) = coefvec0;
-    // Second column contains y-coordinates (width)
-    coefs.col(1).segment(k*len0,len0) = temp*coefvec1.at(k);
-  }
-  // Create gsGeometry-derived object for the patch
-  gsTensorBSpline<2,real_t> shape(basis,coefs);
-
-  gsMultiPatch<T> mp;
-  mp.addPatch(shape);
-  mp.addAutoBoundaries();
-
-  return mp;
-}
-
-template <class T>
-void addClamping(gsMultiPatch<T>& mp, index_t patch, std::vector<boxSide> sides, T offset) //, std::vector<boxSide> sides, T offset)
-{
-
-    gsTensorBSpline<2,T> *geo = dynamic_cast< gsTensorBSpline<2,real_t> * > (&mp.patch(patch));
-
-    T dknot0 = geo->basis().component(0).knots().minIntervalLength();
-    T dknot1 = geo->basis().component(1).knots().minIntervalLength();
-
-    gsInfo<<"sides.size() = "<<sides.size()<<"\n";
-
-    index_t k =0;
-
-
-    for (std::vector<boxSide>::iterator it = sides.begin(); it != sides.end(); it++)
-    {
-        gsInfo<<"side = "<<(*it)<<"\n";
-
-      if (*it==boundary::west || *it==boundary::east) // west or east
-      {
-        if (*it==boundary::east) // east, val = 1
-          geo->insertKnot(1 - std::min(offset, dknot0 / 2),0);
-        else if (*it==boundary::west) // west
-          geo->insertKnot(std::min(offset, dknot0 / 2),0);
-      }
-      else if (*it==boundary::south || *it==boundary::north) // west or east
-      {
-       if (*it==boundary::north) // north
-         geo->insertKnot(1 - std::min(offset, dknot0 / 2),1);
-       else if (*it==boundary::south) // south
-         geo->insertKnot(std::min(offset, dknot0 / 2),1);
-      }
-      else if (*it==boundary::none)
-        gsWarn<<*it<<"\n";
-      else
-        GISMO_ERROR("Side unknown, side = " <<*it);
-
-        k++;
-gsInfo<<"k = "<<k<<"\n";
-    }
-}
-
-template <class T>
-gsMultiPatch<T> Rectangle(T L, T B) //, int n, int m, std::vector<boxSide> sides, T offset)
-{
-  // -------------------------------------------------------------------------
-  // --------------------------Make beam geometry-----------------------------
-  // -------------------------------------------------------------------------
-  int dim = 3; //physical dimension
-  gsKnotVector<> kv0;
-  kv0.initUniform(0,1,0,2,1);
-  gsKnotVector<> kv1;
-  kv1.initUniform(0,1,0,2,1);
-
-  // Make basis
-  gsTensorBSplineBasis<2,T> basis(kv0,kv1);
-
-  // Initiate coefficient matrix
-  gsMatrix<> coefs(basis.size(),dim);
-  // Number of control points needed per component
-  size_t len0 = basis.component(0).size();
-  size_t len1 = basis.component(1).size();
-  gsVector<> coefvec0(len0);
-  // Uniformly distribute control points per component
-  coefvec0.setLinSpaced(len0,0.0,L);
-  gsVector<> coefvec1(basis.component(1).size());
-  coefvec1.setLinSpaced(len1,0.0,B);
-
-  // Z coordinate is zero
-  coefs.col(2).setZero();
-
-  // Define a matrix with ones
-  gsVector<> temp(len0);
-  temp.setOnes();
-  for (size_t k = 0; k < len1; k++)
-  {
-    // First column contains x-coordinates (length)
-    coefs.col(0).segment(k*len0,len0) = coefvec0;
-    // Second column contains y-coordinates (width)
-    coefs.col(1).segment(k*len0,len0) = temp*coefvec1.at(k);
-  }
-  // Create gsGeometry-derived object for the patch
-  gsTensorBSpline<2,real_t> shape(basis,coefs);
-
-  gsMultiPatch<T> mp;
-  mp.addPatch(shape);
-  mp.addAutoBoundaries();
-
-  return mp;
-}
-
-
-template <class T>
-gsMultiPatch<T> AnnularDomain(int n, int p, T R1, T R2)
-{
-  // -------------------------------------------------------------------------
-  // --------------------------Make beam geometry-----------------------------
-  // -------------------------------------------------------------------------
-  int dim = 3; //physical dimension
-  gsKnotVector<> kv0;
-  kv0.initUniform(0,1,0,3,1);
-  gsKnotVector<> kv1;
-  kv1.initUniform(0,1,0,3,1);
-
-  // Make basis
-  // gsTensorNurbsBasis<2,T> basis(kv0,kv1);
-
-  // Initiate coefficient matrix
-  gsMatrix<> coefs(9,dim);
-
-  coefs<<R1,0,0,
-  (R1+R2)/2,0,0,
-  R2,0,0,
-  R1,R1,0,
-  (R1+R2)/2,(R1+R2)/2,0,
-  R2,R2,0,
-  0,R1,0,
-  0,(R1+R2)/2,0,
-  0,R2,0;
-
-  gsMatrix<> weights(9,1);
-  weights<<1,1,1,
-  0.707106781186548,0.707106781186548,0.707106781186548,
-  1,1,1;
-
-  // Create gsGeometry-derived object for the patch
-  gsTensorNurbs<2,real_t> shape(kv0,kv1,coefs,weights);
-
-
-  gsMultiPatch<T> mp;
-  mp.addPatch(shape);
-  mp.addAutoBoundaries();
-
-  // Elevate up to order p
-  if (p>2)
-  {
-    for(index_t i = 2; i< p; ++i)
-        mp.patch(0).degreeElevate();    // Elevate the degree
-  }
-
-  // Refine n times
-  for(index_t i = 0; i< n; ++i)
-      mp.patch(0).uniformRefine();
-
-  return mp;
-}
-
-template <class T>
-gsMultiPatch<T> FrustrumDomain(int n, int p, T R1, T R2, T h)
-{
-  // -------------------------------------------------------------------------
-  // --------------------------Make beam geometry-----------------------------
-  // -------------------------------------------------------------------------
-  // n = number of uniform refinements over the height; n = 0, only top and bottom part
-
-  int dim = 3; //physical dimension
-  gsKnotVector<> kv0;
-  kv0.initUniform(0,1,0,3,1);
-  gsKnotVector<> kv1;
-  kv1.initUniform(0,1,0,3,1);
-
-  // Refine n times
-  for(index_t i = 0; i< n; ++i)
-      kv1.uniformRefine();
-
-  gsDebug<<kv1;
-
-  // Make basis
-  // gsTensorNurbsBasis<2,T> basis(kv0,kv1);
-
-  // Initiate coefficient matrix
-  index_t N = math::pow(2,n)+2;
-  gsMatrix<> coefs(3*N,dim);
-  gsMatrix<> tmp(3,3);
-  T R,H;
-
-  gsMatrix<> weights(3*N,1);
-  for (index_t k=0; k!= N; k++)
-  {
-    R = k*(R2-R1)/(N-1) + R1;
-    H = k*h/(N-1);
-    tmp<< R,0,H,
-          R,R,H,
-          0,R,H;
-
-    coefs.block(3*k,0,3,3) = tmp;
-
-    weights.block(3*k,0,3,1) << 1,0.70711,1;
-  }
-
-  // Create gsGeometry-derived object for the patch
-  gsTensorNurbs<2,real_t> shape(kv0,kv1,coefs,weights);
-
-  gsMultiPatch<T> mp;
-  mp.addPatch(shape);
-  mp.addAutoBoundaries();
-
-  // Elevate up to order p
-  if (p>2)
-  {
-    for(index_t i = 2; i< p; ++i)
-        mp.patch(0).degreeElevate();    // Elevate the degree
-  }
-
-  // // Refine n times
-  // for(index_t i = 0; i< n; ++i)
-  //     mp.patch(0).uniformRefine();
-
-  return mp;
 }
 
 template <class T>
@@ -1009,7 +837,7 @@ void initStepOutput(const std::string name, const gsMatrix<T> & points)
 }
 
 template <class T>
-void writeStepOutput(const gsArcLengthIterator<T> & arcLength, const gsMultiPatch<T> & deformation, const std::string name, const gsMatrix<T> & points, const index_t extreme, const index_t kmax) // extreme: the column of point indices to compute the extreme over (default -1)
+void writeStepOutput(const T lambda, const gsMultiPatch<T> & deformation, const std::string name, const gsMatrix<T> & points, const index_t extreme, const index_t kmax) // extreme: the column of point indices to compute the extreme over (default -1)
 {
   gsMatrix<T> P(2,1), Q(2,1);
   gsMatrix<T> out(3,points.cols());
@@ -1027,7 +855,7 @@ void writeStepOutput(const gsArcLengthIterator<T> & arcLength, const gsMultiPatc
   if (extreme==-1)
   {
     file  << std::setprecision(6)
-          << arcLength.solutionU().norm() << ",";
+          << "NA" << ",";
           for (index_t p=0; p!=points.cols(); p++)
           {
             file<< out(0,p) << ","
@@ -1035,8 +863,8 @@ void writeStepOutput(const gsArcLengthIterator<T> & arcLength, const gsMultiPatc
                 << out(2,p) << ",";
           }
 
-    file  << arcLength.solutionL() << ","
-          << arcLength.indicator() << ","
+    file  << lambda << ","
+          << "NA" << ","
           << "\n";
   }
   else if (extreme==0 || extreme==1)
@@ -1054,7 +882,7 @@ void writeStepOutput(const gsArcLengthIterator<T> & arcLength, const gsMultiPatc
     }
 
     file  << std::setprecision(6)
-          << arcLength.solutionU().norm() << ",";
+          << "NA" << ",";
           for (index_t p=0; p!=points.cols(); p++)
           {
             file<< out(0,p) << ","
@@ -1062,8 +890,8 @@ void writeStepOutput(const gsArcLengthIterator<T> & arcLength, const gsMultiPatc
                 << std::max(abs(out2.col(p).maxCoeff()),abs(out2.col(p).minCoeff())) << ",";
           }
 
-    file  << arcLength.solutionL() << ","
-          << arcLength.indicator() << ","
+    file  << lambda << ","
+          << "NA" << ","
           << "\n";
   }
   else
