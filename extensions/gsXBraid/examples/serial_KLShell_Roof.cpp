@@ -280,13 +280,10 @@ int main (int argc, char** argv)
     assembler->setOptions(opts);
     assembler->setPointLoads(pLoads);
 
-    gsStopwatch stopwatch;
-    real_t time = 0.0;
-
     typedef std::function<gsSparseMatrix<real_t> (gsVector<real_t> const &)>                                Jacobian_t;
     typedef std::function<gsVector<real_t> (gsVector<real_t> const &, real_t, gsVector<real_t> const &) >   ALResidual_t;
     // Function for the Jacobian
-    Jacobian_t Jacobian = [&time,&stopwatch,&assembler](gsVector<real_t> const &x)
+    Jacobian_t Jacobian = [&assembler](gsVector<real_t> const &x)
     {
       gsMultiPatch<> mp_def;
       assembler->constructSolution(x,mp_def);
@@ -295,7 +292,7 @@ int main (int argc, char** argv)
       return m;
     };
     // Function for the Residual
-    ALResidual_t ALResidual = [&time,&stopwatch,&assembler](gsVector<real_t> const &x, real_t lam, gsVector<real_t> const &force)
+    ALResidual_t ALResidual = [&assembler](gsVector<real_t> const &x, real_t lam, gsVector<real_t> const &force)
     {
       gsMultiPatch<> mp_def;
       assembler->constructSolution(x,mp_def);
@@ -351,40 +348,51 @@ int main (int argc, char** argv)
     arcLength.setIndicator(indicator); // RESET INDICATOR
     bool bisected = false;
     real_t dL0 = dL;
-    real_t dLi = dL;      // arc-length for level i
+    gsVector<> dts(maxLevel+2);
+    dts[0] = 1. / step;
+    for (index_t k = 1; k!=dts.size(); k++)
+      dts[k] = dts[k-1]/2;
+    gsVector<> dLs = dts;
+    dLs *= step * dL;
 
     index_t stepi = step; // number of steps for level i
+    real_t time = 0;
+    index_t tidx = 0;
 
-    /*
-      \a solutions is a container the for each level contains the solutions per point
-      \a points contains all the points across levels in the format (level, U, lambda) -------------------------------> OVERKILL? WHY NEEDED?
-      \a refPoints is a container that contains (level, U, lambda) of the points from which a refinement should START in level+1
-      \a errors is a container that contains the error[l][i] e_i at the ith point of level l
-    */
-    std::vector<gsVector<real_t>> parTime(maxLevel+1);
-    std::vector<std::vector<std::pair<gsVector<real_t>,real_t>>> solutions(maxLevel+1);
+    typedef std::pair<gsVector<real_t>,real_t> solution_t;
+    typedef std::pair<index_t,index_t> leaf_t; // level, index in level
+
+    std::vector<std::map<real_t,index_t   >> parTime(maxLevel+1);
+    std::vector<std::map<real_t,solution_t>> solutions(maxLevel+1);
     solutions.reserve(maxLevel+2);
-    std::vector<std::pair<index_t,std::pair<gsVector<real_t> * ,real_t * >>> points;
-    std::vector<std::tuple<index_t,index_t,index_t>> refIdx; // level to compute on, level of start point, index of start point
-    std::vector<std::vector<real_t>> errors(maxLevel);
+
+    std::map<real_t,index_t> tree; // stores for each parametric time (real_t) the level and the index of the time step in the level
+
+    std::queue<std::pair<real_t,leaf_t>> queue;
 
     index_t level = 0;
     gsInfo<<"------------------------------------------------------------------------------------\n";
-    gsInfo<<"\t\t\tLevel "<<level<<" (dL = "<<dLi<<") -- Coarse grid \n";
+    gsInfo<<"\t\t\tLevel "<<level<<" (dL = "<<dLs[level]<<") -- Coarse grid \n";
     gsInfo<<"------------------------------------------------------------------------------------\n";
 
-    dLi = dL / (math::pow(2,level));
+    time = 0.0;
+    tidx = 0;
     stepi = step * (math::pow(2,level));
-    parTime[0] = gsVector<>::LinSpaced(stepi+1,0,1);
 
-    std::vector<std::pair<gsVector<real_t>,real_t>> stepSolutions;
     // Add the undeformed solution
-    solutions[level].push_back(std::make_pair(U0,L0));
-
+    solutions[level].insert({0.0,{U0,L0}});
+    parTime[level].insert({time,tidx});
+    queue.push({time,{level,0}});
+    tree.insert({time,level});
     // Add other solutions
     for (index_t k=1; k<stepi+1; k++)
     {
-      gsInfo<<"Load step "<< k<<"\t"<<"dL = "<<dLi<<"; parametric time = "<<parTime[0].at(k)<<"\n";
+      time+=dts[level];
+      gsDebugVar(dts[level]);
+      gsDebugVar(time);
+      tidx++;
+
+      gsInfo<<"Load step "<< k<<"\t"<<"dL = "<<dLs[level]<<"; parametric time = "<<time<<"\n";
       // assembler->constructSolution(solVector,solution);
       arcLength.step();
 
@@ -393,8 +401,15 @@ int main (int argc, char** argv)
         GISMO_ERROR("Loop terminated, arc length method did not converge.\n");
 
       real_t lambda = arcLength.solutionL();
-      solutions[level].push_back(std::make_pair(arcLength.solutionU(),lambda));
+      solutions.at(level).insert({time,{arcLength.solutionU(),lambda}});
+      parTime.at(level).insert({time,tidx});
+      queue.push({time,{level,k}});
+      tree[time] = level;
+      // tree.insert({time,{level,k}});
     }
+
+    for (std::map<real_t, index_t >::const_iterator it = tree.begin(); it != tree.end(); ++it)
+      gsInfo<<"t = "<<it->first<<"\tlevel = "<<it->second<<"\n";
 
     /////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////
@@ -402,18 +417,25 @@ int main (int argc, char** argv)
 
     // Store solution coefficients in a matrix
     index_t blocksize = mp.patch(0).coefs().rows();
-    gsMatrix<> solutionCoefs(step+1,3*blocksize);
-    gsVector<> times(step+1);
+    gsMatrix<> solutionCoefs(tree.size(),3*blocksize);
+    gsVector<> loads(tree.size());
+    gsVector<> times(tree.size());
     gsMultiPatch<> mp_tmp;
-    for (index_t lam = 0; lam!=step+1; ++lam)
-    {
-      assembler->constructSolution(solutions[0].at(lam).first,mp_tmp);
-      solutionCoefs.row(lam) = mp_tmp.patch(0).coefs().reshape(1,3*blocksize);
 
-      times.at(lam) = solutions[0].at(lam).second;
+    index_t row = 0;
+    for (std::map<real_t, index_t>::const_iterator it = tree.begin(); it != tree.end(); ++it)
+    {
+      assembler->constructSolution(solutions[it->second][it->first].first,mp_tmp);
+      solutionCoefs.row(row) = mp_tmp.patch(0).coefs().reshape(1,3*blocksize);
+
+      loads.at(row) = solutions[it->second][it->first].second;
+
+      times.at(row) = it->first;
+
+      row++;
     }
 
-    gsTensorBSpline<3,real_t> fit = gsSpaceTimeFit<3,real_t>(3,solutionCoefs,times,parTime[0],dbasis,deg_z);
+    gsTensorBSpline<3,real_t> fit = gsSpaceTimeFit<3,real_t>(3,solutionCoefs,loads,times,dbasis,deg_z);
 
     typename gsTensorBSpline<3,real_t>::BoundaryGeometryType target;
 
@@ -454,26 +476,33 @@ int main (int argc, char** argv)
         }
       }
 
-      for (index_t k = 0; k!=solutions[0].size(); k++)
       {
-        assembler->constructSolution(solutions[0].at(k).first,mp_tmp);
-        real_t lambda = solutions[0].at(k).second;
-
-        deformation.patch(0) = mp_tmp.patch(0);
-        deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
-
-        if (plot)
+        index_t k = 0;
+        for (std::map<real_t, index_t >::const_iterator it = tree.begin(); it != tree.end(); ++it)
         {
-          solField = gsField<>(mp,deformation);
-          std::string fileName = dirname + "/" + "data" + util::to_string(k);
-          gsWriteParaview<>(solField, fileName, 1000,mesh);
-          fileName = "data" + util::to_string(k) + "0";
-          datacollection.addTimestep(fileName,k,".vts");
-          if (mesh) datacollection.addTimestep(fileName,k,"_mesh.vtp");
-        }
-        if (write)
-        {
-            writeStepOutput(lambda,deformation, dirname + "/" + wn, writePoints,1, 201);
+          assembler->constructSolution(solutions[it->second][it->first].first,mp_tmp);
+
+          real_t lambda = solutions[it->second][it->first].second;
+
+          real_t Time = it->first;
+
+          deformation.patch(0) = mp_tmp.patch(0);
+          deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
+
+          if (plot)
+          {
+            solField = gsField<>(mp,deformation);
+            std::string fileName = dirname + "/" + "data" + util::to_string(k);
+            gsWriteParaview<>(solField, fileName, 1000,mesh);
+            fileName = "data" + util::to_string(k) + "0";
+            datacollection.addTimestep(fileName,Time,".vts");
+            if (mesh) datacollection.addTimestep(fileName,k,"_mesh.vtp");
+          }
+          if (write)
+          {
+              writeStepOutput(lambda,deformation, dirname + "/" + wn, writePoints,1, 201);
+          }
+          k++;
         }
       }
 
@@ -487,6 +516,58 @@ int main (int argc, char** argv)
     /////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////
 
+    index_t p; // start index at level-1
+
+    gsDebugVar(queue.size());
+    leaf_t leaf;
+    std::tie(time,leaf) = queue.front();
+    queue.pop();
+    std::tie(level,p) = leaf;
+
+    gsDebugVar(queue.size());
+
+    real_t dtime = dts[level+1];
+    real_t evaltime = time;
+
+    // Set starting point
+    gsDebugVar(solutions[level][time].first);
+    gsDebugVar(solutions[level][time].second);
+    std::tie(Uold,Lold) = solutions[level][time];
+    gsInfo<<"Starting from (lvl,|U|,L) = ("<<level<<","<<Uold.norm()<<","<<Lold<<")\n";
+
+    arcLength.setLength(dLs[level+1]);
+
+    arcLength.setSolution(Uold,Lold);
+    arcLength.resetStep();
+
+    std::tie(Uguess,Lguess) = solutions[level][time+dts[level]]; /////////// FIX THIS!
+    arcLength.setInitialGuess(Uguess,Lguess);
+
+    for (index_t k=0; k!=2; k++)
+    {
+      evaltime += dtime;
+      gsDebugVar(evaltime);
+
+      /// Extract solution at time
+      fit.slice(2,evaltime,target);
+      gsGeometry<real_t> * slice = target.clone().release();
+      real_t refload  = slice->coefs()(0,3);
+      slice->embed(3);
+      gsMultiPatch<> mp_tmp2(*slice);
+      mp_tmp2.patch(0).coefs() -= mp.patch(0).coefs();
+      gsVector<> refvec = assembler->constructSolutionVector(mp_tmp2);
+      solution_t refPoint = {refvec,refload};
+      /// !Extract solution at time
+
+      arcLength.step();
+
+      gsVector<> DeltaU = refvec - arcLength.solutionU();
+      real_t DeltaL = refload - arcLength.solutionL();
+      real_t error = arcLength.distance(DeltaU,DeltaL) / (dLs[level]);
+
+      gsDebugVar(error);
+
+    }
 
     /*
 
