@@ -18,6 +18,9 @@
 // #include <gsThinShell/gsArcLengthIterator.h>
 #include <gsStructuralAnalysis/gsArcLengthIterator.h>
 
+#include <gsHSplines/gsKdNode.h>
+
+
 using namespace gismo;
 
 template <class T>
@@ -28,6 +31,330 @@ void writeStepOutput(const T lambda, const gsMultiPatch<T> & deformation, const 
 
 template<index_t d, class T>
 gsTensorBSpline<d,T> gsSpaceTimeFit(index_t dim, const gsMatrix<T> & solutionCoefs, const gsVector<T> & times, const gsVector<T> & ptimes, gsMultiBasis<T> & spatialBasis, index_t deg = 2);
+
+
+template<class T, class solution_t >
+class gsSpaceTimeHierarchy
+{
+
+  typedef kdnode<1, T> node_t;
+
+  typedef typename node_t::point point_t;
+
+public:
+
+  ~gsSpaceTimeHierarchy()
+  {
+    for (size_t l=0; l!=m_tree.size(); ++l)
+      for (typename std::map<T,node_t * >::const_iterator it = m_tree[l].begin(); it != m_tree[l].end(); ++it)
+      {
+        gsDebug<<"delete m_tree["<<l<<"]["<<it->first<<"])\n";
+        delete it->second;
+      }
+  }
+
+  /**
+   * @brief      { function_description }
+   *
+   * @param[in]  times      The times (MONOTONICALLY INCREASING!)
+   * @param[in]  solutions  The solutions
+   * @param[in]  maxLevels  The maximum levels
+   */
+  gsSpaceTimeHierarchy(std::vector<T> times, std::vector<solution_t> solutions, index_t maxLevels = 5)
+  :
+  m_points(times.size()),
+  m_maxLevel(maxLevels)
+  {
+    GISMO_ASSERT(times.size()==solutions.size(),"Sizes must agree");
+
+    m_solutions.push_back(std::map<T,solution_t>());
+    m_solutions.push_back(std::map<T,solution_t>());
+    for (size_t k=0; k!=times.size(); ++k)
+    {
+      m_solutions[0].insert({times.at(k),solutions.at(k)});
+
+    }
+
+    _init();
+
+  }
+
+private:
+  void _init()
+  {
+    m_tree.resize(m_maxLevel+1);
+    gsVector<T,1> low,upp;
+    index_t k=0;
+    for (typename std::map<T,solution_t>::const_iterator it = m_solutions[0].begin(); it != std::prev(m_solutions[0].end()); it++, k++)
+    {
+      /// Add parents to tree
+      low<<it->first;
+      upp<<std::next(it)->first;
+      m_tree[0][it->first] = new node_t(low,upp);
+    }
+
+    for (typename std::map<T,node_t * >::const_iterator it = m_tree[0].begin(); it != m_tree[0].end(); ++it)
+    {
+      low = it->second->lowCorner();
+      upp = it->second->uppCorner();
+      it->second->split(0,(upp[0]+low[0])/2);
+      m_tree[1][it->second->left ->lowCorner()[0]] = it->second->left;
+      m_tree[1][it->second->right->lowCorner()[0]] = it->second->right;
+
+      /// Add childs to queue
+      m_queue.push({1,it->second->left ->lowCorner()[0]});
+      m_queue.push({1,it->second->right->lowCorner()[0]});
+    }
+
+    /// Add childs to queue
+    // for (typename std::map<T,node_t * >::const_iterator it = m_tree[1].begin(); it != m_tree[1].end(); ++it)
+    //   m_queue.push({1,it->first});
+  }
+
+  std::pair<point_t,point_t> _interval(node_t * node)
+  {
+    std::pair<point_t,point_t> interval;
+
+    if (node->isLeaf())
+    {
+      interval.first  = node->lowCorner();
+      interval.second = node->uppCorner();
+      return interval;
+    }
+    else
+    {
+      node_t * left  = node->left;
+      node_t * right = node->right;
+      while (!left->isLeaf() || !right->isLeaf())
+      {
+        if (!left->isLeaf())
+          left  = left ->left;
+        if (!right->isLeaf())
+          right = right->right;
+      }
+      interval.first  = left->lowCorner();
+      interval.second = right->uppCorner();
+      return interval;
+    }
+  }
+
+  // void _initLevel(index_t level)
+  // {
+  //   GISMO_ASSERT(m_ptimes.size()==m_indices.size(),"times and indices have different level");
+  //   if (m_ptimes.size() < level+1 && level < m_maxLevel)
+  //   {
+  //     gsVector<T> time;
+  //     time.setLinSpaced(m_points*math::pow(2,level),0,1);
+  //     m_ptime = std::vector(time.data(),time.data() + time.rows()*time.cols());
+  //     gsVector<index_t> index;
+  //     index.setLinSpaced(m_points*math::pow(2,level),0,m_points*math::pow(2,level)-1);
+  //     m_index = std::vector(index.data(),index.data() + index.rows()*index.cols());
+
+  //     m_ptimes.push_back(std::map<index_t,T>());
+  //     m_indices.push_back(std::map<T,index_t>());
+  //     GISMO_ASSERT(m_ptime.size()==m_index.size(),"Sizes are not the same!");
+  //     for (index_t k=0; k!=m_ptime.size(); k++)
+  //     {
+  //       m_ptimes[level].insert({m_index[k],m_ptime[k]});
+  //       m_indices[level].insert({m_ptime[k],m_index[k]});
+  //     }
+
+  //     // m_solutions.push_back(std::map<index_t,solution_t>());
+  //     // m_times.push_back(std::map<index_t,T>());
+  //   }
+  // }
+public:
+
+  std::tuple<T,    T,  solution_t, solution_t> getJob()
+  //         time, dt, start,      guess
+  {
+    GISMO_ASSERT(!m_queue.empty(),"The queue is empty! Something went wrong.");
+
+    T time = m_queue.front().second;
+    index_t level = m_queue.front().first;
+
+    GISMO_ASSERT(m_tree[level].count(time)>0,"Node at level "<<level<<" with time "<<time<<"not found");
+
+    GISMO_ASSERT(!m_tree[level][time]->isRoot(),"Node cannot be a parent!");
+
+    gsVector<T> low, upp;
+    std::tie(low,upp) = _interval(m_tree[level][time]);
+    T tstart = low[0];
+    T tend   = upp[0];
+    T dt     = tend-tstart;
+
+    gsDebugVar(level);
+
+    solution_t start, guess;
+    if (m_tree[level][time]->isLeftChild())
+    {
+      std::tie(low,upp) = _interval(m_tree[level][time]->parent);
+      tend = upp(0);
+
+      // Find best available start point
+      index_t startLevel = level;
+      while (startLevel > 0 && m_solutions[startLevel-1].count(tstart)==0)
+        startLevel -=1;
+
+      GISMO_ASSERT(m_solutions[startLevel-1].count(tstart)!=0,"Cannot find start point at tstart = "<<tstart<<" in level "<<startLevel-1);
+      start = m_solutions[startLevel-1][tstart];
+
+      // Find best available start point
+      index_t guessLevel = level;
+      while (guessLevel > 0 && m_solutions[guessLevel-1].count(tend)==0)
+        guessLevel -=1;
+
+      GISMO_ASSERT(m_solutions[guessLevel-1].count(tend)!=0,"Cannot find end point at tend = "<<tend<<" in level "<<guessLevel-1);
+      guess = m_solutions[guessLevel-1][tend];
+    }
+    else if (m_tree[level][time]->isRightChild())
+    {
+      std::tie(low,upp) = _interval(m_tree[level][time]->parent);
+      tend = upp(0);
+      GISMO_ASSERT(m_solutions[level].count(tstart)!=0,"Cannot find start point at tstart = "<<tstart<<" in level "<<level);
+      start = m_solutions[level][tstart];
+      GISMO_ASSERT(m_solutions[level-1].count(tend)!=0,"Cannot find end point at tend = "<<tend<<" in level "<<level-1);
+      guess = m_solutions[level-1][tend];
+    }
+    else
+      GISMO_ERROR("Node is not a child!");
+
+    return std::make_tuple(tstart, dt, start, guess);
+  }
+
+  bool reference_into(solution_t & result)
+  {
+    T time = m_queue.front().second;
+    index_t level = m_queue.front().first;
+
+    gsVector<T> low, upp;
+    std::tie(low,upp) = _interval(m_tree[level][time]);
+
+    if (m_solutions[level-1].count(upp[0])!=0)
+    {
+      result =  m_solutions[level-1][upp[0]];
+      return true;
+    }
+    else
+      return false;
+  }
+
+  void submitJob(solution_t solution)
+  {
+    T time = m_queue.front().second;
+    index_t level = m_queue.front().first;
+    node_t * tmp = m_tree[level][time];
+
+    gsVector<T> low, upp;
+    std::tie(low,upp) = _interval(tmp);
+    T tend   = upp[0];
+
+    if (m_solutions.size() < level + 1)
+      m_solutions.resize(level+1);
+
+    m_solutions[level][tend] = solution;
+    gsDebug<<"Job submitted at t = "<<tend<<"; level "<<level<<"\n";
+  }
+
+  void addJobHere()
+  {
+    T time = m_queue.front().second;
+    index_t level = m_queue.front().first;
+
+    if (level+1 > m_maxLevel)
+    {
+      gsWarn<<"Max level reached!";
+      return;
+    }
+
+    gsVector<T> low, upp;
+    std::tie(low,upp) = _interval(m_tree[level][time]);
+
+    m_tree[level][time]->split(0,(upp[0]+low[0])/2);
+
+    m_tree[level+1][m_tree[level][time]->left ->lowCorner()[0]] = m_tree[level][time]->left;
+    m_tree[level+1][m_tree[level][time]->right->lowCorner()[0]] = m_tree[level][time]->right;
+
+    gsDebugVar(m_tree[level][time]->left ->lowCorner()[0]);
+    gsDebugVar(m_tree[level][time]->right->lowCorner()[0]);
+
+    m_queue.push({level+1,m_tree[level][time]->left ->lowCorner()[0]});
+    m_queue.push({level+1,m_tree[level][time]->right->lowCorner()[0]});
+  }
+
+  index_t currentLevel()
+  {
+    return m_queue.front().first;
+  }
+
+  void removeJob()
+  {
+    m_queue.pop();
+  }
+
+  bool empty()
+  {
+    return m_queue.empty();
+  }
+
+  std::pair<std::vector<T>,std::vector<solution_t>> getFlatSolution()
+  {
+    std::vector<T> times;
+    std::vector<solution_t> solutions;
+
+    std::map<T,solution_t> map;
+    for (size_t l = 0; l!=m_solutions.size(); ++l)
+      for (typename std::map<T,solution_t>::const_iterator it = m_solutions[l].begin(); it!=m_solutions[l].end(); ++it)
+        map[it->first] = it->second; // overwrites if duplicate
+
+    for (typename std::map<T,solution_t>::const_iterator it = map.begin(); it!=map.end(); ++it)
+    {
+      times.push_back(it->first);
+      solutions.push_back(it->second);
+    }
+
+    return std::make_pair(times,solutions);
+  }
+
+  void print()
+  {
+    for (size_t l = 0; l!=m_solutions.size(); ++l)
+    {
+      gsInfo<<"level = "<<l<<":\n";
+      for (typename std::map<T,solution_t>::const_iterator it = m_solutions[l].begin(); it!=m_solutions[l].end(); ++it)
+      {
+        gsInfo<<"\t";
+        gsInfo<<"time = "<<it->first<<"\tsol = "<<it->second<<"\n";
+      }
+    }
+  }
+
+  void printTree()
+  {
+    gsVector<T,1> low, upp;
+    for (size_t l=0; l!=m_tree.size(); ++l)
+      for (typename std::map<T,node_t * >::const_iterator it = m_tree[l].begin(); it != m_tree[l].end(); ++it)
+      {
+        std::tie(low,upp) = _interval(it->second);
+        if (l!=0)
+          gsDebug<<"interval = ["<<low[0]<<","<<upp[0]<<"], level = "<<l<<"\n";
+        else
+          gsDebug<<"interval = ["<<low[0]<<","<<upp[0]<<"], level = "<<l<<"\n";
+      }
+  }
+
+
+protected:
+  index_t m_points;
+  index_t m_maxLevel;
+
+  std::vector<std::map<T,solution_t>>       m_solutions;
+
+  std::vector<std::map<T,node_t *>>         m_tree;
+
+  std::queue<std::pair<index_t,T>>   m_queue;
+
+};
 
 int main (int argc, char** argv)
 {
@@ -337,8 +664,8 @@ int main (int argc, char** argv)
     gsMultiPatch<> deformation = mp;
 
     // Make objects for previous solutions
-    real_t Lguess,Lold, L0;
-    gsMatrix<> Uguess,Uold, U0;
+    real_t Lguess,Lold, L0, Lref;
+    gsMatrix<> Uguess,Uold, U0, Uref;
     Uold.setZero(Force.size(),1);
     U0.setZero(Force.size(),1);
     L0 = Lold = 0.0;
@@ -346,53 +673,98 @@ int main (int argc, char** argv)
     gsMatrix<> solVector;
     real_t indicator = 0.0;
     arcLength.setIndicator(indicator); // RESET INDICATOR
-    bool bisected = false;
     real_t dL0 = dL;
-    gsVector<> dts(maxLevel+2);
-    dts[0] = 1. / step;
-    for (index_t k = 1; k!=dts.size(); k++)
-      dts[k] = dts[k-1]/2;
-    gsVector<> dLs = dts;
-    dLs *= step * dL;
 
-    index_t stepi = step; // number of steps for level i
-    real_t time = 0;
-    index_t tidx = 0;
 
     typedef std::pair<gsVector<real_t>,real_t> solution_t;
-    typedef std::pair<index_t,index_t> leaf_t; // level, index in level
 
-    std::vector<std::map<real_t,index_t   >> parTime(maxLevel+1);
-    std::vector<std::map<real_t,solution_t>> solutions(maxLevel+1);
-    solutions.reserve(maxLevel+2);
 
-    std::map<real_t,index_t> tree; // stores for each parametric time (real_t) the level and the index of the time step in the level
 
-    std::queue<std::pair<real_t,leaf_t>> queue;
+    /*
+      gsVector<> x(step), y(step);
+      x.setLinSpaced(step,2,3);
+      for (index_t k=0; k!=step; ++k)
+      {
+        gsDebugVar(x[k]);
+        y[k] = x[k]*x[k];
+      }
+
+      std::vector<real_t> xvec, yvec;
+      xvec = std::vector(x.data(),x.data() + x.rows()*x.cols());
+      yvec = std::vector(y.data(),y.data() + y.rows()*y.cols());
+
+      gsSpaceTimeHierarchy<real_t,real_t> hierarchy(xvec,yvec,3);
+
+
+      hierarchy.print();
+      hierarchy.printTree();
+
+      real_t x_tmp, y_tmp, dx;
+      real_t start, guess;
+
+      index_t k = 0;
+      while (!hierarchy.empty())
+      {
+        std::tie(x_tmp,dx,start,guess) = hierarchy.getJob();
+
+        real_t result;
+        bool success = hierarchy.reference_into(result);
+        if (success)
+          gsDebugVar(result);
+
+        y_tmp = (x_tmp + dx) * (x_tmp + dx);
+
+        hierarchy.submitJob(y_tmp);
+
+        if (k==1)
+        {
+          gsDebug<<"Job added\n";
+          hierarchy.addJobHere();
+      hierarchy.printTree();
+        }
+
+        hierarchy.removeJob();
+
+        k++;
+      }
+
+      hierarchy.printTree();
+
+      std::vector<real_t> ts;
+      std::vector<real_t> sols;
+
+      std::tie(ts,sols) = hierarchy.getFlatSolution();
+    */
+
+    /*
+      \a solutions is a container the for each level contains the solutions per point
+      \a points contains all the points across levels in the format (level, U, lambda) -------------------------------> OVERKILL? WHY NEEDED?
+      \a refPoints is a container that contains (level, U, lambda) of the points from which a refinement should START in level+1
+      \a errors is a container that contains the error[l][i] e_i at the ith point of level l
+    */
+
+    std::vector<solution_t> solutions;
+    std::vector<real_t> times;
+    real_t timescaling;
+    real_t s = 0;
 
     index_t level = 0;
     gsInfo<<"------------------------------------------------------------------------------------\n";
-    gsInfo<<"\t\t\tLevel "<<level<<" (dL = "<<dLs[level]<<") -- Coarse grid \n";
+    gsInfo<<"\t\t\tLevel "<<level<<" (dL = "<<dL<<") -- Coarse grid \n";
     gsInfo<<"------------------------------------------------------------------------------------\n";
 
-    time = 0.0;
-    tidx = 0;
+    index_t stepi = step; // number of steps for level i
     stepi = step * (math::pow(2,level));
 
     // Add the undeformed solution
-    solutions[level].insert({0.0,{U0,L0}});
-    parTime[level].insert({time,tidx});
-    queue.push({time,{level,0}});
-    tree.insert({time,level});
+    solutions.push_back({U0,L0});
+    times.push_back(s);
     // Add other solutions
     for (index_t k=1; k<stepi+1; k++)
     {
-      time+=dts[level];
-      gsDebugVar(dts[level]);
-      gsDebugVar(time);
-      tidx++;
+      s+=dL;
 
-      gsInfo<<"Load step "<< k<<"\t"<<"dL = "<<dLs[level]<<"; parametric time = "<<time<<"\n";
+      gsInfo<<"Load step "<< k<<"\t"<<"dL = "<<dL<<"; curve time = "<<s<<"\n";
       // assembler->constructSolution(solVector,solution);
       arcLength.step();
 
@@ -401,15 +773,9 @@ int main (int argc, char** argv)
         GISMO_ERROR("Loop terminated, arc length method did not converge.\n");
 
       real_t lambda = arcLength.solutionL();
-      solutions.at(level).insert({time,{arcLength.solutionU(),lambda}});
-      parTime.at(level).insert({time,tidx});
-      queue.push({time,{level,k}});
-      tree[time] = level;
-      // tree.insert({time,{level,k}});
+      solutions.push_back({arcLength.solutionU(),lambda});
+      times.push_back(s);
     }
-
-    for (std::map<real_t, index_t >::const_iterator it = tree.begin(); it != tree.end(); ++it)
-      gsInfo<<"t = "<<it->first<<"\tlevel = "<<it->second<<"\n";
 
     /////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////
@@ -417,25 +783,19 @@ int main (int argc, char** argv)
 
     // Store solution coefficients in a matrix
     index_t blocksize = mp.patch(0).coefs().rows();
-    gsMatrix<> solutionCoefs(tree.size(),3*blocksize);
-    gsVector<> loads(tree.size());
-    gsVector<> times(tree.size());
+    gsMatrix<> solutionCoefs(solutions.size(),3*blocksize);
+    gsVector<> loads(solutions.size());
     gsMultiPatch<> mp_tmp;
 
-    index_t row = 0;
-    for (std::map<real_t, index_t>::const_iterator it = tree.begin(); it != tree.end(); ++it)
+    for (index_t k=0; k!= solutions.size(); k++)
     {
-      assembler->constructSolution(solutions[it->second][it->first].first,mp_tmp);
-      solutionCoefs.row(row) = mp_tmp.patch(0).coefs().reshape(1,3*blocksize);
+      assembler->constructSolution(solutions[k].first,mp_tmp);
+      solutionCoefs.row(k) = mp_tmp.patch(0).coefs().reshape(1,3*blocksize);
 
-      loads.at(row) = solutions[it->second][it->first].second;
-
-      times.at(row) = it->first;
-
-      row++;
+      loads.at(k) = solutions[k].second;
     }
 
-    gsTensorBSpline<3,real_t> fit = gsSpaceTimeFit<3,real_t>(3,solutionCoefs,loads,times,dbasis,deg_z);
+    gsTensorBSpline<3,real_t> fit = gsSpaceTimeFit<3,real_t>(3,solutionCoefs,loads,gsAsVector<>(times),dbasis,deg_z);
 
     typename gsTensorBSpline<3,real_t>::BoundaryGeometryType target;
 
@@ -447,7 +807,7 @@ int main (int argc, char** argv)
     if (plot || write)
     {
       gsVector<> xi;
-      xi.setLinSpaced(100,0,0.9999);
+      xi.setLinSpaced(100,times[0],times[times.size()-1]);
 
       for (index_t k = 0; k!=xi.size(); k++)
       {
@@ -467,7 +827,7 @@ int main (int argc, char** argv)
           std::string fileName = dirname + "/" + output + util::to_string(k);
           gsWriteParaview<>(solField, fileName, 1000,mesh);
           fileName = output + util::to_string(k) + "0";
-          collection.addTimestep(fileName,k,".vts");
+          collection.addTimestep(fileName,xi[k],".vts");
           if (mesh) collection.addTimestep(fileName,k,"_mesh.vtp");
         }
         if (write)
@@ -477,14 +837,13 @@ int main (int argc, char** argv)
       }
 
       {
-        index_t k = 0;
-        for (std::map<real_t, index_t >::const_iterator it = tree.begin(); it != tree.end(); ++it)
+        for (index_t k=0; k!= solutions.size(); k++)
         {
-          assembler->constructSolution(solutions[it->second][it->first].first,mp_tmp);
+          assembler->constructSolution(solutions[k].first,mp_tmp);
 
-          real_t lambda = solutions[it->second][it->first].second;
+          real_t lambda = solutions[k].second;
 
-          real_t Time = it->first;
+          real_t Time = times[k];
 
           deformation.patch(0) = mp_tmp.patch(0);
           deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
@@ -502,72 +861,228 @@ int main (int argc, char** argv)
           {
               writeStepOutput(lambda,deformation, dirname + "/" + wn, writePoints,1, 201);
           }
-          k++;
         }
       }
 
-    if (plot)
-    {
-      collection.save();
-      datacollection.save();
+      if (plot)
+      {
+        collection.save();
+        datacollection.save();
+      }
     }
-    }
     /////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////
 
-    index_t p; // start index at level-1
+    gsSpaceTimeHierarchy<real_t,solution_t> hierarchy(times,solutions,maxLevel);
 
-    gsDebugVar(queue.size());
-    leaf_t leaf;
-    std::tie(time,leaf) = queue.front();
-    queue.pop();
-    std::tie(level,p) = leaf;
+    hierarchy.printTree();
 
-    gsDebugVar(queue.size());
-
-    real_t dtime = dts[level+1];
-    real_t evaltime = time;
-
-    // Set starting point
-    gsDebugVar(solutions[level][time].first);
-    gsDebugVar(solutions[level][time].second);
-    std::tie(Uold,Lold) = solutions[level][time];
-    gsInfo<<"Starting from (lvl,|U|,L) = ("<<level<<","<<Uold.norm()<<","<<Lold<<")\n";
-
-    arcLength.setLength(dLs[level+1]);
-
-    arcLength.setSolution(Uold,Lold);
-    arcLength.resetStep();
-
-    std::tie(Uguess,Lguess) = solutions[level][time+dts[level]]; /////////// FIX THIS!
-    arcLength.setInitialGuess(Uguess,Lguess);
-
-    for (index_t k=0; k!=2; k++)
+    solution_t start, guess, reference;
+    real_t ttmp = 0;
+    real_t dLtmp;
+    index_t it = 0;
+    index_t itmax = 100;
+    real_t TOL = 1e-2;
+    while (!hierarchy.empty() && it < itmax)
     {
-      evaltime += dtime;
-      gsDebugVar(evaltime);
+      std::tie(ttmp,dLtmp,start,guess) = hierarchy.getJob();
 
-      /// Extract solution at time
-      fit.slice(2,evaltime,target);
-      gsGeometry<real_t> * slice = target.clone().release();
-      real_t refload  = slice->coefs()(0,3);
-      slice->embed(3);
-      gsMultiPatch<> mp_tmp2(*slice);
-      mp_tmp2.patch(0).coefs() -= mp.patch(0).coefs();
-      gsVector<> refvec = assembler->constructSolutionVector(mp_tmp2);
-      solution_t refPoint = {refvec,refload};
-      /// !Extract solution at time
+      gsDebugVar(ttmp);
+      gsDebugVar(dLtmp);
 
+      std::tie(Uold,Lold) = start;
+      std::tie(Uguess,Lguess) = guess;
+
+      arcLength.setLength(dLtmp);
+      arcLength.setSolution(Uold,Lold);
+      arcLength.resetStep();
+
+      arcLength.setInitialGuess(Uguess,Lguess);
+
+      gsInfo<<"Starting from (lvl,|U|,L) = ("<<hierarchy.currentLevel()<<","<<Uold.norm()<<","<<Lold<<"), curve time = "<<ttmp<<"\n";
       arcLength.step();
 
-      gsVector<> DeltaU = refvec - arcLength.solutionU();
-      real_t DeltaL = refload - arcLength.solutionL();
-      real_t error = arcLength.distance(DeltaU,DeltaL) / (dLs[level]);
+      bool success = hierarchy.reference_into(reference);
+      if (success)
+      {
+        std::tie(Uref,Lref) = reference;
+      }
+      else
+      {
+        fit.slice(2,ttmp+dLtmp,target);
+        gsGeometry<real_t> * slice = target.clone().release();
+        Lref  = slice->coefs()(0,3);
+        slice->embed(3);
+        gsMultiPatch<> mp_tmp2(*slice);
+        mp_tmp2.patch(0).coefs() -= mp.patch(0).coefs();
+        Uref = assembler->constructSolutionVector(mp_tmp2);
+      }
 
-      gsDebugVar(error);
+      gsVector<> DeltaU = Uref - arcLength.solutionU();
+      real_t DeltaL = Lref - arcLength.solutionL();
 
+      real_t error = arcLength.distance(DeltaU,DeltaL) / (dLtmp);
+
+      hierarchy.submitJob(std::make_pair(arcLength.solutionU(),arcLength.solutionL()));
+
+      if (error > TOL)
+      {
+        gsDebug<<"ERROR > TOL\n";
+        hierarchy.addJobHere();
+      }
+
+      hierarchy.removeJob();
+
+      it++;
     }
+
+    std::tie(times,solutions) = hierarchy.getFlatSolution();
+
+    gsDebugVar(gsAsVector(times));
+
+    /////////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////
+
+    gsParaviewCollection collection2(dirname + "/" + output + "_refit");
+    gsParaviewCollection datacollection2(dirname + "/" + "data" + "_refit");
+
+
+    // Store solution coefficients in a matrix
+    blocksize = mp.patch(0).coefs().rows();
+    solutionCoefs = gsMatrix<> (solutions.size(),3*blocksize);
+    loads = gsVector<>(solutions.size());
+
+    for (index_t k=0; k!= solutions.size(); k++)
+    {
+      assembler->constructSolution(solutions[k].first,mp_tmp);
+      solutionCoefs.row(k) = mp_tmp.patch(0).coefs().reshape(1,3*blocksize);
+
+      loads.at(k) = solutions[k].second;
+    }
+
+    gsTensorBSpline<3,real_t> fit2 = gsSpaceTimeFit<3,real_t>(3,solutionCoefs,loads,gsAsVector<>(times),dbasis,deg_z);
+
+    if (plot || write)
+    {
+      gsVector<> xi;
+      xi.setLinSpaced(100,times[0],0.99999*times[times.size()-1]);
+
+      for (index_t k = 0; k!=xi.size(); k++)
+      {
+        fit2.slice(2,xi.at(k),target);
+        gsGeometry<real_t> * slice = target.clone().release();
+        real_t lambda = slice->coefs()(0,3);
+        slice->embed(3);
+
+        deformation.patch(0) = *slice;
+        deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
+
+        if (plot)
+        {
+          solField = gsField<>(mp,deformation);
+          gsWriteParaview(solField,"slice");
+
+          std::string fileName = dirname + "/" + output + util::to_string(k);
+          gsWriteParaview<>(solField, fileName, 1000,mesh);
+          fileName = output + util::to_string(k) + "0";
+          collection2.addTimestep(fileName,xi[k],".vts");
+          if (mesh) collection2.addTimestep(fileName,k,"_mesh.vtp");
+        }
+        if (write)
+        {
+            writeStepOutput(lambda,deformation, dirname + "/" + line, writePoints,1, 201);
+        }
+      }
+
+      {
+        for (index_t k=0; k!= solutions.size(); k++)
+        {
+          assembler->constructSolution(solutions[k].first,mp_tmp);
+
+          real_t lambda = solutions[k].second;
+
+          real_t Time = times[k];
+
+          deformation.patch(0) = mp_tmp.patch(0);
+          deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
+
+          if (plot)
+          {
+            solField = gsField<>(mp,deformation);
+            std::string fileName = dirname + "/" + "data" + util::to_string(k);
+            gsWriteParaview<>(solField, fileName, 1000,mesh);
+            fileName = "data" + util::to_string(k) + "0";
+            datacollection2.addTimestep(fileName,Time,".vts");
+            if (mesh) datacollection2.addTimestep(fileName,k,"_mesh.vtp");
+          }
+          if (write)
+          {
+              writeStepOutput(lambda,deformation, dirname + "/" + wn, writePoints,1, 201);
+          }
+        }
+      }
+
+      if (plot)
+      {
+        collection2.save();
+        datacollection2.save();
+      }
+    }
+
+    // index_t p; // start index at level-1
+
+    // gsDebugVar(queue.size());
+    // leaf_t leaf;
+    // std::tie(time,leaf) = queue.front();
+    // queue.pop();
+    // std::tie(level,p) = leaf;
+
+    // gsDebugVar(queue.size());
+
+    // real_t dtime = dts[level+1];
+    // real_t evaltime = time;
+
+    // // Set starting point
+    // gsDebugVar(solutions[level][time].first);
+    // gsDebugVar(solutions[level][time].second);
+    // std::tie(Uold,Lold) = solutions[level][time];
+    // gsInfo<<"Starting from (lvl,|U|,L) = ("<<level<<","<<Uold.norm()<<","<<Lold<<")\n";
+
+    // arcLength.setLength(dLs[level+1]);
+
+    // arcLength.setSolution(Uold,Lold);
+    // arcLength.resetStep();
+
+    // std::tie(Uguess,Lguess) = solutions[level][time+dts[level]]; /////////// FIX THIS!
+    // arcLength.setInitialGuess(Uguess,Lguess);
+
+    // for (index_t k=0; k!=2; k++)
+    // {
+    //   evaltime += dtime;
+    //   gsDebugVar(evaltime);
+
+    //   /// Extract solution at time
+    //   fit.slice(2,evaltime,target);
+    //   gsGeometry<real_t> * slice = target.clone().release();
+    //   real_t refload  = slice->coefs()(0,3);
+    //   slice->embed(3);
+    //   gsMultiPatch<> mp_tmp2(*slice);
+    //   mp_tmp2.patch(0).coefs() -= mp.patch(0).coefs();
+    //   gsVector<> refvec = assembler->constructSolutionVector(mp_tmp2);
+    //   solution_t refPoint = {refvec,refload};
+    //   /// !Extract solution at time
+
+    //   arcLength.step();
+
+    //   gsVector<> DeltaU = refvec - arcLength.solutionU();
+    //   real_t DeltaL = refload - arcLength.solutionL();
+    //   real_t error = arcLength.distance(DeltaU,DeltaL) / (dLs[level]);
+
+    //   gsDebugVar(error);
+
+    // }
 
     /*
 
@@ -945,12 +1460,9 @@ gsTensorBSpline<d,T> gsSpaceTimeFit(index_t dim, const gsMatrix<T> & solutionCoe
   // get the Greville Abcissae (anchors)
   gsMatrix<> anchors = lbasis.anchors();
 
-  gsDebugVar(ptimes.size());
-  gsDebugVar(anchors.size());
-
   // Get the collocation matrix at the anchors
   gsSparseMatrix<> C;
-  lbasis.collocationMatrix(ptimes.transpose(),C);
+  lbasis.collocationMatrix(anchors,C);
 
   gsSparseSolver<>::LU solver;
   solver.compute(C);
