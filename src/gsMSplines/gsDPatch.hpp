@@ -269,7 +269,10 @@ namespace gismo
     template<short_t d,class T>
     gsGeometry<T>* gsDPatch<d,T>::exportPatch(index_t patch, bool computeCoefs)
     {
-        ////////////////////////////////////////////////
+        GISMO_NO_IMPLEMENTATION;
+        // gsMappedSpline<d,T> mspline(m_patches,m_matrix);
+        // return mspline.exportPatch(patch);
+/*        ////////////////////////////////////////////////
         // This can be done more efficient!!
         // Do it once instead of for every patch
         ////////////////////////////////////////////////
@@ -287,11 +290,18 @@ namespace gismo
         size = m_mapOriginal.patchSize(patch);
         gsMatrix<T> local = m_coefs.block(offset,0,size,m_patches.geoDim());
         return m_bases[patch].makeGeometry( give(local) ).release();
+*/
     }
 
     template<short_t d,class T>
     gsMultiPatch<T> gsDPatch<d,T>::exportToPatches()
     {
+        if (m_RefPatches.nPatches()==0)
+            m_RefPatches = gsMultiPatch<T>(m_patches);
+
+        gsMappedSpline<d,T> mspline(m_RefPatches,m_matrix.transpose());
+        return mspline.exportToPatches();
+/*
         m_coefs = this->preCoefficients();
         m_coefs = m_matrix.transpose() * m_coefs;
 
@@ -300,6 +310,7 @@ namespace gismo
             patches[p]= this->exportPatch(p,false);
 
         return gsMultiPatch<T>(patches,m_patches.boundaries(),m_patches.interfaces());
+*/
     }
 
     /*=====================================================================================
@@ -907,71 +918,74 @@ namespace gismo
             }
         }
 
-        size_t tmp;
-        m_size = tmp = 0;
-        // number of interior basis functions
-        for (size_t k=0; k!=m_patches.nPatches(); k++)
-            tmp += (m_bases.basis(k).component(0).size()-4)*(m_bases.basis(k).component(1).size()-4);
-        // gsDebug<<"Number of interior DoFs: "<<tmp<<"\n";
-        m_size += tmp;
+        // size_t tmp;
+        // m_size = tmp = 0;
+        // // number of interior basis functions
+        // for (size_t k=0; k!=m_patches.nPatches(); k++)
+        //     tmp += (m_bases.basis(k).component(0).size()-4)*(m_bases.basis(k).component(1).size()-4);
+        // // gsDebug<<"Number of interior DoFs: "<<tmp<<"\n";
+        // m_size += tmp;
 
-        // interfaces
-        gsBasis<T> * basis1;
-        gsBasis<T> * basis2;
-        gsVector<index_t> indices1,indices2;
-        tmp = 0;
-        for(gsBoxTopology::const_iiterator iit = m_patches.iBegin(); iit!= m_patches.iEnd(); iit++)
-        {
-            basis1 = &m_bases.basis(iit->first().patch);
-            basis2 = &m_bases.basis(iit->second().patch);
-            tmp += basis1->boundary(iit->first().side()).size() - 4;
-            tmp += basis2->boundary(iit->second().side()).size() - 4;
-        }
-        // gsDebug<<"Number of interface DoFs: "<<tmp<<"\n";
-        m_size += tmp;
+        // // interfaces
+        // gsBasis<T> * basis1;
+        // gsBasis<T> * basis2;
+        // gsVector<index_t> indices1,indices2;
+        // tmp = 0;
+        // for(gsBoxTopology::const_iiterator iit = m_patches.iBegin(); iit!= m_patches.iEnd(); iit++)
+        // {
+        //     basis1 = &m_bases.basis(iit->first().patch);
+        //     basis2 = &m_bases.basis(iit->second().patch);
+        //     tmp += basis1->boundary(iit->first().side()).size() - 4;
+        //     tmp += basis2->boundary(iit->second().side()).size() - 4;
+        // }
+        // // gsDebug<<"Number of interface DoFs: "<<tmp<<"\n";
+        // m_size += tmp;
 
-        // boundaries
-        tmp = 0;
-        for(gsBoxTopology::const_biterator bit = m_patches.bBegin(); bit!= m_patches.bEnd(); bit++)
-        {
-            basis1 = &m_bases.basis(bit->patch);
-            tmp += 2*(basis1->boundary(bit->side()).size() - 4);
-        }
-        // gsDebug<<"Number of boundary DoFs: "<<tmp<<"\n";
-        m_size += tmp;
+        // // boundaries
+        // tmp = 0;
+        // for(gsBoxTopology::const_biterator bit = m_patches.bBegin(); bit!= m_patches.bEnd(); bit++)
+        // {
+        //     basis1 = &m_bases.basis(bit->patch);
+        //     tmp += 2*(basis1->boundary(bit->side()).size() - 4);
+        // }
+        // // gsDebug<<"Number of boundary DoFs: "<<tmp<<"\n";
+        // m_size += tmp;
 
-        // vertices
-        tmp = 0;
-        std::vector<bool> passed(m_patches.nPatches()*4);
-        std::fill(passed.begin(), passed.end(), false);
+        // // vertices
+        // tmp = 0;
+        // std::vector<bool> passed(m_patches.nPatches()*4);
+        // std::fill(passed.begin(), passed.end(), false);
 
-        std::vector<patchCorner> corners;
-        index_t corn = 0;
-        for (size_t p=0; p!=m_patches.nPatches(); p++)
-            for (index_t c=1; c<=4; c++)
-            {
-                index_t idx = _vertIndex(p,c);
-                if (!passed.at(idx))
-                {
-                    m_patches.getCornerList(patchCorner(p,c),corners);
+        // std::vector<patchCorner> corners;
+        // index_t corn = 0;
+        // for (size_t p=0; p!=m_patches.nPatches(); p++)
+        //     for (index_t c=1; c<=4; c++)
+        //     {
+        //         index_t idx = _vertIndex(p,c);
+        //         if (!passed.at(idx))
+        //         {
+        //             m_patches.getCornerList(patchCorner(p,c),corners);
 
-                    for (size_t k=0; k!=corners.size(); k++)
-                        passed.at(_vertIndex(corners[k].patch,corners[k])) = true;
+        //             for (size_t k=0; k!=corners.size(); k++)
+        //                 passed.at(_vertIndex(corners[k].patch,corners[k])) = true;
 
-                    std::pair<index_t,bool> vdata = _vertexData(patchCorner(p,c)); // corner c
-                    if (!vdata.second) // boundary vertex
-                        tmp += 4;
-                    else
-                        tmp += vdata.first; // valence;
+        //             std::pair<index_t,bool> vdata = _vertexData(patchCorner(p,c)); // corner c
+        //             if (!vdata.second) // boundary vertex
+        //                 tmp += 4;
+        //             else
+        //                 tmp += vdata.first; // valence;
 
-                    corn +=1;
-                }
-            }
-        // gsDebug<<"Number of unique corners: "<<corn<<"\n";
+        //             corn +=1;
+        //         }
+        //     }
+        // // gsDebug<<"Number of unique corners: "<<corn<<"\n";
 
-        // gsDebug<<"Number of vertex DoFs: "<<tmp<<"\n";
+        // // gsDebug<<"Number of vertex DoFs: "<<tmp<<"\n";
 
-        m_size += tmp;
+        // m_size += tmp;
+
+        m_size = m_bases.totalSize();
+        gsDebugVar(m_size);
 
         m_Bbases = m_bases = gsMultiBasis<T>(m_patches);
 
@@ -1040,6 +1054,7 @@ namespace gismo
                 basis = &m_bases.basis(patches[p]);
                 indices = static_cast<gsVector<index_t>>( basis->boundary(psides[p]) );
 
+        gsDebugVar("test");
                 patchSide(patches[p],psides[p]).getContainedCorners(d,pcorners);
                 vdata1 = this->_vertexData(pcorners[0]);
                 vdata2 = this->_vertexData(pcorners[1]);
@@ -1049,6 +1064,7 @@ namespace gismo
                 // for(size_t i=0; i < allIndices.size(); i++)
                 //     std::cout << allIndices.at(i) << ' ';
 
+        gsDebugVar("test");
                 std::vector<index_t> selectedIndices;
                 // for both vertices of the side, add the indices at the vertex and one inside
                 for (index_t c =0; c!=2; c++)
@@ -1067,12 +1083,14 @@ namespace gismo
                 result.resize(it-result.begin());                      //  5 15 25
 
                 gsAsMatrix<index_t> indices(result,result.size(),1);
-                m_mapModified.markBoundary(patches[p], indices);
+                // m_mapModified.markBoundary(patches[p], indices);
 
                 // gsDebug<<"Eliminated "<<indices.transpose()<<" of basis "<<patches[p]<<"\n";
                 m_sideCheck.at(sidx) = true;
             }
         }
+
+        gsDebugVar("test");
 
         // boundaries
         for(gsBoxTopology::const_biterator bit = m_patches.bBegin(); bit!= m_patches.bEnd(); bit++)
@@ -1119,11 +1137,11 @@ namespace gismo
                             {
                                 if (std::count(m_C0s.begin(), m_C0s.end(), pcorner))
                                 {
-                                    m_mapModified.eliminateDof(_indexFromVert(1,pcorner,psides[p],0),pcorner.patch);
+                                    // m_mapModified.eliminateDof(_indexFromVert(1,pcorner,psides[p],0),pcorner.patch);
                                 }
                                 else
                                 {
-                                    m_mapModified.markBoundary(pcorner.patch,_indicesFromVert(2,pcorner,psides[p]));
+                                    // m_mapModified.markBoundary(pcorner.patch,_indicesFromVert(2,pcorner,psides[p]));
                                     // gsDebug<<"Eliminated "<<_indicesFromVert(2,pcorner,psides[p]).transpose()<<" of basis "<<pcorner.patch<<"\n";
                                 }
                             }
@@ -1218,7 +1236,7 @@ namespace gismo
                     pcorner.getContainingSides(d,psides);
                     for (size_t p=0; p!=psides.size(); p++)
                     {
-                        m_mapModified.markBoundary(pcorner.patch,_indicesFromVert(2,pcorner,psides[p]));
+                        // m_mapModified.markBoundary(pcorner.patch,_indicesFromVert(2,pcorner,psides[p]));
                         // gsDebug<<"Eliminated "<<_indicesFromVert(2,pcorner,psides[p]).transpose()<<" of basis "<<pcorner.patch<<"\n";
                     }
                 }
@@ -1306,14 +1324,18 @@ namespace gismo
                     indices[1] = _indexFromVert(k,pcorner,psides[iindex],0); // bk0 on patch of iface
                     indices[2] = _indexFromVert(k,otherCorner,otherSide,0); // bk0 on other patch
 
-                    index_t rowIdx = m_mapModified.index(indices[0],pcorner.patch);
-                    index_t colIdx = m_mapOriginal.index(indices[0],pcorner.patch);
+                    index_t rowIdx,rowIdx2,colIdx;
 
+                    rowIdx = m_mapModified.index(indices[0],pcorner.patch);
+                    colIdx = m_mapOriginal.index(indices[0],pcorner.patch);
                     m_matrix(rowIdx,colIdx) = 1.0;
-                    colIdx = m_mapOriginal.index(indices[1],psides[iindex].patch);
-                    m_matrix(rowIdx,colIdx) = 0.5;
-                    colIdx = m_mapOriginal.index(indices[2],otherSide.patch);
-                    m_matrix(rowIdx,colIdx) = 0.5;
+                    rowIdx2 = colIdx = m_mapOriginal.index(indices[1],psides[iindex].patch);
+                    m_matrix(rowIdx2,colIdx) = m_matrix(rowIdx,colIdx) = 0.5;
+                    m_basisCheck[rowIdx2] = true;
+
+                    rowIdx2 = colIdx = m_mapOriginal.index(indices[1],psides[iindex].patch);
+                    m_matrix(rowIdx2,colIdx) = m_matrix(rowIdx,colIdx) = 0.5;
+                    m_basisCheck[rowIdx2] = true;
 
                     m_basisCheck[rowIdx] = true;
                 }
@@ -1507,8 +1529,11 @@ namespace gismo
             // 1. give the basis function a weight 1 from itself
             index_t b11_p1 = _indexFromVert(1,pcorner,psides[0],1); // point 1,1 (does not matter which reference side is taken)
             index_t rowIdx = m_mapModified.index(b11_p1,pcorner.patch);
+            index_t rowIdx2;
             index_t colIdx = m_mapOriginal.index(b11_p1,pcorner.patch);
             m_matrix(rowIdx,colIdx) = 1.0;
+
+            index_t b00_p1 = _indexFromVert(0,pcorner,psides[0],0); // point 0,0 (does not matter which reference side is taken)
 
             for (std::vector<patchSide>::iterator side = psides.begin(); side != psides.end(); ++side)
             {
@@ -1522,21 +1547,33 @@ namespace gismo
                 index_t b10_p2 = _indexFromVert(1,otherCorner,otherSide,0); // point 0,1
 
                 // 2. give the basis function a weight 1/valence from the other (0,0) basis functions
-                index_t index;
-                for (std::vector<patchCorner>::iterator corn = corners.begin(); corn != corners.end(); ++corn)
-                {
-                    tmpBasis = &m_bases.basis(corn->patch);
-                    index = tmpBasis->functionAtCorner(corn->corner());
-                    colIdx = m_mapOriginal.index(index,corn->patch);
-                    m_matrix(rowIdx,colIdx) = 1./vdata.first;
-                }
+                // index_t index;
+                // for (std::vector<patchCorner>::iterator corn = corners.begin(); corn != corners.end(); ++corn)
+                // {
+                //     tmpBasis = &m_bases.basis(corn->patch);
+                //     index = tmpBasis->functionAtCorner(corn->corner());
+                //     colIdx = m_mapOriginal.index(index,corn->patch);
+                //     rowIdx2= m_mapModified.index(index,corn->patch);
+                //     m_matrix(rowIdx2,colIdx) = m_matrix(rowIdx,colIdx) = 1./vdata.first;
+                //     m_basisCheck[rowIdx2] = true;
+                // }
+
+                rowIdx2= m_mapOriginal.index(b00_p1,side->patch);
+                colIdx = m_mapOriginal.index(b00_p1,side->patch);
+                m_matrix(rowIdx2,colIdx) = m_matrix(rowIdx,colIdx) = 1./vdata.first;
+                m_basisCheck[rowIdx2] = true;
+
 
                 // 3. add weight 1/2 from the interface bcs.
                 colIdx = m_mapOriginal.index(b10_p1,side->patch);
-                m_matrix(rowIdx,colIdx) = 0.5;
+                rowIdx2= m_mapModified.index(b10_p1,side->patch);
+                m_matrix(rowIdx2,colIdx) = m_matrix(rowIdx,colIdx) = 0.5;
+                m_basisCheck[rowIdx2] = true;
 
-                colIdx = m_mapOriginal.index(b10_p2,otherSide.patch);
-                m_matrix(rowIdx,colIdx) = 0.5;
+                // colIdx = m_mapOriginal.index(b10_p2,otherSide.patch);
+                // rowIdx2= m_mapOriginal.index(b10_p2,otherSide.patch);
+                // m_matrix(rowIdx,colIdx) = 0.5;
+                // m_basisCheck[rowIdx2] = true;
 
             }
             m_basisCheck[rowIdx] = true;
@@ -1613,25 +1650,28 @@ namespace gismo
             }
         }
 
-        index_t rowIdx,colIdx;
+        index_t rowIdx,rowIdx2,colIdx;
         // loop over adjacent patches and couple the DoFs.
         for (index_t p =0; p!= 2; p++)
         {
             np = abs(p-1); // not index p;
             for (index_t k=0; k!= indices[p].size(); k++ )
             {
+                // itself
                 rowIdx = m_mapModified.index(oindices[p].at(k),iface[p].patch);
                 // rowIdx1 = m_mapOriginal.index(oindices[p].at(k),patches[p]);
                 colIdx = m_mapOriginal.index(oindices[p].at(k),iface[p].patch);
                 m_matrix(rowIdx,colIdx) = 1.0;
-
+                // its neighbour on the same patch
                 colIdx = m_mapOriginal.index(indices[p].at(k),iface[p].patch);
-                m_matrix(rowIdx,colIdx) = 0.5;
-
-                colIdx = m_mapOriginal.index(indices[np].at(k),iface[np].patch);
-                m_matrix(rowIdx,colIdx) = 0.5;
-
+                rowIdx2= m_mapModified.index(indices[p].at(k),iface[p].patch);
+                m_matrix(rowIdx2,colIdx) = m_matrix(rowIdx,colIdx) = 0.5;
                 m_basisCheck[rowIdx] = true;
+                m_basisCheck[rowIdx2] = true;
+
+                // colIdx = m_mapOriginal.index(indices[np].at(k),iface[np].patch);
+                // m_matrix(rowIdx,colIdx) = 0.5;
+
             }
             m_sideCheck[ _sideIndex(iface[p].patch, iface[p].side()) ] = true; // side finished
         }
@@ -1684,6 +1724,9 @@ namespace gismo
                     continue;
                 colIdx = m_mapOriginal.index(b,p);
                 m_matrix(rowIdx,colIdx) = 1;
+                gsDebugVar(rowIdx);
+                gsDebugVar(m_basisCheck.size());
+
                 m_basisCheck[rowIdx] = true;
                 // gsInfo<<"Basis function "<<rowIdx<<"(patch: "<<p<<"; fun: "<<b<<") is "<< (m_basisCheck[rowIdx] ? "" : "not ")<<"processed\n";
             }

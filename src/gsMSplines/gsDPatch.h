@@ -17,6 +17,7 @@
 #include <gsCore/gsMultiPatch.h>
 
 #include <gsMSplines/gsMappedBasis.h>
+#include <gsMSplines/gsMappedSpline.h>
 
 namespace gismo
 {
