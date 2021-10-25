@@ -394,7 +394,7 @@ int main(int argc, char **argv)
   int globalID = 0;
 
   // ID, start time, time step, start, guess, stop?
-  typedef std::tuple<index_t,real_t,real_t,solution_t,solution_t> send_tuple_t;
+  typedef std::tuple<index_t,real_t,real_t,solution_t,solution_t,bool> send_tuple_t;
   // ID, solution, intermediate solution
   typedef std::tuple<index_t,solution_t,solution_t> recv_tuple_t;
 
@@ -605,7 +605,7 @@ int main(int argc, char **argv)
     {
       std::tie(ID,ttmp,dLtmp,start,guess) = hierarchy.pop();
       // ID, start time, time step, start, guess, stop?
-      send = std::make_tuple(ID,ttmp,dLtmp,start,guess);
+      send = std::make_tuple(ID,ttmp,dLtmp,start,guess,false);
 
       Utmp = start.first;
       Ltmp = start.second;
@@ -668,7 +668,7 @@ int main(int argc, char **argv)
       while (!hierarchy.empty() && !m_workers.empty())
       {
         std::tie(ID,ttmp,dLtmp,start,guess) = hierarchy.pop();
-        send = std::make_tuple(ID,ttmp,dLtmp,start,guess);
+        send = std::make_tuple(ID,ttmp,dLtmp,start,guess,false);
 
         Utmp = start.first;
         Ltmp = start.second;
@@ -681,7 +681,7 @@ int main(int argc, char **argv)
     }
 
     ///// Send stop signal
-    // std::get<5>(send) = true;
+    std::get<5>(send) = true;
     for (int w = 1; w!=proc_count; w++)
       comm.isend(&send, 1,w,&req,tag);
 
@@ -803,11 +803,11 @@ int main(int argc, char **argv)
 
       comm.recv(&receive,1,0,tag,MPI_STATUS_IGNORE);
 
-      // if (std::get<5>(receive))
-      // {
-      //   gsInfo<<"[MPI process "<<my_rank<<"] I have to stop!!"<<"\n";
-      //   break;
-      // }
+      if (std::get<5>(receive))
+      {
+        gsInfo<<"[MPI process "<<my_rank<<"] I have to stop!!"<<"\n";
+        break;
+      }
 
       ID = std::get<0>(receive);
       ttmp = std::get<1>(receive);
