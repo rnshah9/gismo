@@ -37,6 +37,8 @@ gsTensorBSpline<dim,T> gsSpaceTimeFit(const std::vector<gsMatrix<T>> & solutionC
 
 int main (int argc, char** argv)
 {
+  /////[MPI] Initialization (all)
+
     // Input options
     int numElevate    = 1;
     int numHref       = 1;
@@ -73,7 +75,7 @@ int main (int argc, char** argv)
     real_t tolU       = 1e-6;
     real_t tolF       = 1e-3;
 
-    index_t deg_z = 2;
+    index_t deg_z = 1;
 
     std::string wn("data.csv");
 
@@ -210,24 +212,8 @@ int main (int argc, char** argv)
     load << 0.0, 0.0, Load ;
     pLoads.addLoad(point, load, 0 );
 
-    dirname = dirname + "/" +  "Roof_t="+ std::to_string(thickness) + "-r=" + std::to_string(numHref) + "-e" + std::to_string(numElevate) +"_solution";
-    output =  "solution";
-    wn = "data.txt";
-    std::string line = "line.txt";
 
-    std::string commands = "mkdir -p " + dirname;
-    const char *command = commands.c_str();
-    system(command);
 
-    // plot geometry
-    if (plot)
-      gsWriteParaview(mp,dirname + "/" + "mp",1000,mesh);
-
-    if (write)
-    {
-      initStepOutput(dirname + "/" + wn, writePoints);
-      initStepOutput(dirname + "/" + line, writePoints);
-    }
 
     // Initialise solution object
     gsMultiPatch<> mp_def = mp;
@@ -337,12 +323,41 @@ int main (int argc, char** argv)
     arcLength.options().setSwitch("Quasi",quasiNewton);
 
 
-    gsInfo<<arcLength.options();
     arcLength.applyOptions();
     arcLength.initialize();
 
 
     gsMultiPatch<> deformation = mp;
+
+    typedef std::pair<gsVector<real_t>,real_t> solution_t;
+    /////[MPI] !Initialization (all)
+
+    /////[MPI] export (rank 0)
+
+      dirname = dirname + "/" +  "Roof_t="+ std::to_string(thickness) + "-r=" + std::to_string(numHref) + "-e" + std::to_string(numElevate) +"_solution";
+      output =  "solution";
+      wn = "data.txt";
+      std::string line = "line.txt";
+
+      std::string commands = "mkdir -p " + dirname;
+      const char *command = commands.c_str();
+      system(command);
+
+      // plot geometry
+      if (plot)
+        gsWriteParaview(mp,dirname + "/" + "mp",1000,mesh);
+
+      if (write)
+      {
+        initStepOutput(dirname + "/" + wn, writePoints);
+        initStepOutput(dirname + "/" + line, writePoints);
+      }
+
+      gsInfo<<arcLength.options();
+
+    /////[MPI] !export (rank 0)
+
+    /////[MPI] initialize computation (rank 0)
 
     // Make objects for previous solutions
     real_t Lguess,Lold, L0, Lref;
@@ -355,9 +370,6 @@ int main (int argc, char** argv)
     real_t indicator = 0.0;
     arcLength.setIndicator(indicator); // RESET INDICATOR
     real_t dL0 = dL;
-
-
-    typedef std::pair<gsVector<real_t>,real_t> solution_t;
 
     /*
       \a solutions is a container the for each level contains the solutions per point
@@ -400,9 +412,13 @@ int main (int argc, char** argv)
       times.push_back(s);
     }
 
+    /////[MPI] !initialize computation (rank 0)
+
     /////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////
+
+    /////[MPI] make fit (rank 0)
 
     // Store solution coefficients in a matrix
     // index_t blocksize = mp.patch(0).coefs().rows();
@@ -424,6 +440,10 @@ int main (int argc, char** argv)
     gsTensorBSpline<3,real_t> fit = gsSpaceTimeFit<3,real_t>(solutionCoefs,loads,gsAsVector<>(times),dbasis,deg_z);
 
     typename gsTensorBSpline<3,real_t>::BoundaryGeometryType target;
+
+    /////[MPI] !make fit (rank 0)
+
+    /////[MPI] plot (rank 0)
 
     gsParaviewCollection collection(dirname + "/" + output);
     gsParaviewCollection datacollection(dirname + "/" + "data");
@@ -449,8 +469,6 @@ int main (int argc, char** argv)
         {
           solField = gsField<>(mp,deformation);
           gsWriteParaview(solField,"slice");
-
-          gsDebugVar(xi[k]);
 
           std::string fileName = dirname + "/" + output + util::to_string(k);
           gsWriteParaview<>(solField, fileName, 1000,mesh);
@@ -498,13 +516,18 @@ int main (int argc, char** argv)
         datacollection.save();
       }
     }
+
+    /////[MPI] !plot (rank 0)
+
     /////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////
 
+    /////[MPI] init hierarchy (rank 0)
+
     gsSpaceTimeHierarchy<real_t,solution_t> hierarchy(times,solutions);
     hierarchy.options().setInt("MaxLevel",5);
-    hierarchy.options().setInt("Split",false);
+    hierarchy.options().setInt("Split",true);
     hierarchy.init();
     hierarchy.printQueue();
     hierarchy.printTree();
@@ -516,13 +539,24 @@ int main (int argc, char** argv)
     index_t it = 0;
     index_t itmax = 100;
     real_t TOL = 1e-2;
+
+    /////[MPI] !init hierarchy (rank 0)
+    gsTensorBSpline<3,real_t> fit2 = gsSpaceTimeFit<3,real_t>(solutionCoefs,loads,gsAsVector<>(times),dbasis,deg_z);
+
+    /////[MPI] big loop (rank 0)
     while (!hierarchy.empty() && it < itmax)
     {
+    /////[MPI] pop and send (rank 0)
       std::tie(ID,ttmp,dLtmp,start,guess) = hierarchy.pop();
-      dLtmp *= 0.5;
+    /////[MPI] !pop and send (rank 0)
+
+    /////[MPI] compute (rank !0)
 
       std::tie(Uold,Lold) = start;
       std::tie(Uguess,Lguess) = guess;
+
+      gsDebugVar(ttmp);
+      gsDebugVar(dLtmp);
 
       arcLength.setLength(dLtmp);
       arcLength.setSolution(Uold,Lold);
@@ -532,36 +566,72 @@ int main (int argc, char** argv)
 
       gsInfo<<"Starting with ID "<<ID<<" from (lvl,|U|,L) = ("<<hierarchy.currentLevel(ID)<<","<<Uold.norm()<<","<<Lold<<"), curve time = "<<ttmp<<"\n";
 
-      // if (make_pair)
-      // {
-      //   arcLength.step();
-      //   hierarchy.submit(ID,std::make_pair(arcLength.solutionU(),arcLength.solutionL()));
-      // }
-      // else
-      // {
-        arcLength.step();
-        hierarchy.submitLeft(ID,std::make_pair(arcLength.solutionU(),arcLength.solutionL()));
+      arcLength.step();
 
-        arcLength.step();
-        hierarchy.submitRight(ID,std::make_pair(arcLength.solutionU(),arcLength.solutionL()));
-      // }
+    /////[MPI] !compute (rank !0)
+
+    /////[MPI] receive and compute error (rank 0)
+      hierarchy.submit(ID,std::make_pair(arcLength.solutionU(),arcLength.solutionL()));
 
       bool success = hierarchy.getReference(ID,reference);
       if (success)
       {
         std::tie(Uref,Lref) = reference;
-        gsDebugVar(Uref.norm());
-        gsDebugVar(Lref);
       }
       else
       {
-        fit.slice(2,ttmp+dLtmp,target);
+        fit2.slice(2,ttmp+dLtmp,target);
         gsGeometry<real_t> * slice = target.clone().release();
         Lref  = slice->coefs()(0,3);
         slice->embed(3);
         gsMultiPatch<> mp_tmp2(*slice);
         mp_tmp2.patch(0).coefs() -= mp.patch(0).coefs();
         Uref = assembler->constructSolutionVector(mp_tmp2);
+      }
+
+      gsDebugVar(Lref);
+      gsDebugVar(Uref.norm());
+
+
+      /////[MPI] postprocess (rank 0)
+      std::tie(times,solutions) = hierarchy.getFlatSolution();
+
+      // Store solution coefficients in a matrix
+      solutionCoefs.resize(solutions.size());
+      // solutionCoefs = gsMatrix<> (solutions.size(),3*blocksize);
+      loads = gsVector<>(solutions.size());
+
+      for (index_t k=0; k!= solutions.size(); k++)
+      {
+        assembler->constructSolution(solutions[k].first,mp_tmp);
+        solutionCoefs.at(k) = mp_tmp.patch(0).coefs();
+
+        loads.at(k) = solutions[k].second;
+      }
+
+      gsDebugVar(loads);
+      gsDebugVar(gsAsVector<>(times));
+
+
+      initStepOutput(dirname + "/ID=" + std::to_string(ID) + "_" + line, writePoints);
+      fit2 = gsSpaceTimeFit<3,real_t>(solutionCoefs,loads,gsAsVector<>(times),dbasis,deg_z);
+      if (plot || write)
+      {
+        gsVector<> xi;
+        xi.setLinSpaced(100,times[0],times[times.size()-1]);
+
+        for (index_t k = 0; k!=xi.size(); k++)
+        {
+          fit2.slice(2,xi.at(k),target);
+          gsGeometry<real_t> * slice = target.clone().release();
+          real_t lambda = slice->coefs()(0,3);
+          slice->embed(3);
+
+          deformation.patch(0) = *slice;
+          deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
+
+          writeStepOutput(lambda,deformation, dirname + "/ID=" + std::to_string(ID) + "_" + line, writePoints,1, 201);
+        }
       }
 
       gsVector<> DeltaU = Uref - arcLength.solutionU();
@@ -578,36 +648,20 @@ int main (int argc, char** argv)
       }
 
       hierarchy.removeJob(ID);
+    /////[MPI] !receive and compute error (rank 0)
 
       it++;
     }
-
-    std::tie(times,solutions) = hierarchy.getFlatSolution();
-
-    gsDebugVar(gsAsVector(times));
+    /////[MPI] !big loop (rank 0)
 
     /////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////
 
-    gsParaviewCollection collection2(dirname + "/" + output + "_refit");
+    output = output + + "_refit";
+
+    gsParaviewCollection collection2(dirname + "/" + output);
     gsParaviewCollection datacollection2(dirname + "/" + "data" + "_refit");
-
-
-    // Store solution coefficients in a matrix
-    solutionCoefs.resize(solutions.size());
-    // solutionCoefs = gsMatrix<> (solutions.size(),3*blocksize);
-    loads = gsVector<>(solutions.size());
-
-    for (index_t k=0; k!= solutions.size(); k++)
-    {
-      assembler->constructSolution(solutions[k].first,mp_tmp);
-      solutionCoefs.at(k) = mp_tmp.patch(0).coefs();
-
-      loads.at(k) = solutions[k].second;
-    }
-
-    gsTensorBSpline<3,real_t> fit2 = gsSpaceTimeFit<3,real_t>(solutionCoefs,loads,gsAsVector<>(times),dbasis,deg_z);
 
     if (plot || write)
     {
@@ -628,8 +682,6 @@ int main (int argc, char** argv)
         {
           solField = gsField<>(mp,deformation);
           gsWriteParaview(solField,"slice");
-
-          gsDebugVar(xi[k]);
 
           std::string fileName = dirname + "/" + output + util::to_string(k);
           gsWriteParaview<>(solField, fileName, 1000,mesh);
@@ -658,7 +710,7 @@ int main (int argc, char** argv)
           if (plot)
           {
             solField = gsField<>(mp,deformation);
-            std::string fileName = dirname + "/" + "data" + util::to_string(k);
+            std::string fileName = dirname + "/" + "data_refit" + util::to_string(k);
             gsWriteParaview<>(solField, fileName, 1000,mesh);
             fileName = "data" + util::to_string(k) + "0";
             datacollection2.addTimestep(fileName,0,Time,".vts");
@@ -677,6 +729,7 @@ int main (int argc, char** argv)
         datacollection2.save();
       }
     }
+    /////[MPI] postprocess (rank 0)
 
     // index_t p; // start index at level-1
 
@@ -988,8 +1041,7 @@ void initStepOutput(const std::string name, const gsMatrix<T> & points)
 {
   std::ofstream file;
   file.open(name,std::ofstream::out);
-  file  << std::setprecision(20)
-        << "Deformation norm" << ",";
+  file  << std::setprecision(20);
         for (index_t k=0; k!=points.cols(); k++)
         {
           file<< "point "<<k<<" - x" << ","
@@ -997,8 +1049,7 @@ void initStepOutput(const std::string name, const gsMatrix<T> & points)
               << "point "<<k<<" - z" << ",";
         }
 
-  file  << "Lambda" << ","
-        << "Indicator"
+  file  << "Lambda"
         << "\n";
   file.close();
 
@@ -1023,8 +1074,7 @@ void writeStepOutput(const T lambda, const gsMultiPatch<T> & deformation, const 
   file.open(name,std::ofstream::out | std::ofstream::app);
   if (extreme==-1)
   {
-    file  << std::setprecision(6)
-          << "NA" << ",";
+    file  << std::setprecision(6);
           for (index_t p=0; p!=points.cols(); p++)
           {
             file<< out(0,p) << ","
@@ -1032,8 +1082,7 @@ void writeStepOutput(const T lambda, const gsMultiPatch<T> & deformation, const 
                 << out(2,p) << ",";
           }
 
-    file  << lambda << ","
-          << "NA" << ","
+    file  << lambda
           << "\n";
   }
   else if (extreme==0 || extreme==1)
@@ -1050,8 +1099,7 @@ void writeStepOutput(const T lambda, const gsMultiPatch<T> & deformation, const 
       }
     }
 
-    file  << std::setprecision(6)
-          << "NA" << ",";
+    file  << std::setprecision(6);
           for (index_t p=0; p!=points.cols(); p++)
           {
             file<< out(0,p) << ","
@@ -1059,8 +1107,7 @@ void writeStepOutput(const T lambda, const gsMultiPatch<T> & deformation, const 
                 << std::max(abs(out2.col(p).maxCoeff()),abs(out2.col(p).minCoeff())) << ",";
           }
 
-    file  << lambda << ","
-          << "NA" << ","
+    file  << lambda
           << "\n";
   }
   else

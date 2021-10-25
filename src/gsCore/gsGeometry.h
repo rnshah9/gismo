@@ -531,7 +531,7 @@ public:
             }
         }
 #       ifndef NDEBUG
-        else gsWarn<<"Coefficients projected (deleted)..\n";
+        // else gsWarn<<"Coefficients projected (deleted)..\n";
 #       endif
     }
 
