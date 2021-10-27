@@ -245,6 +245,9 @@ public:
 
     variable getBdrFunction() const { return m_exprdata->getMutVar(); }
 
+    variable getBdrFunction(const gsBoundaryConditions<T> & bc, const std::string & tag) const
+    { return m_exprdata->getMutVar(); }
+
     element getElement() const { return m_element; }
 
     void setFixedDofVector(gsMatrix<T> & dof, short_t unk = 0);
@@ -528,9 +531,9 @@ private:
                     const index_t ii = rowMap.index(rowInd0.at(i),patchInd,r); //N_i
                     if ( rowMap.is_free_index(ii) )
                     {
-                        for (index_t c = 0; c != cd; ++c)
+                        if (isMatrix)
                         {
-                            if (isMatrix)
+                            for (index_t c = 0; c != cd; ++c)
                             {
                                 const index_t cls = c * colInd0.rows();     //local stride
 
@@ -557,11 +560,11 @@ private:
                                     }
                                 }
                             }
-                            else
-                            {
-#                               pragma omp atomic
-                                m_rhs.at(ii) += localMat.at(rls+i);
-                            }
+                        }
+                        else
+                        {
+#                           pragma omp atomic
+                            m_rhs.at(ii) += localMat.at(rls+i);
                         }
                     }
                 }
