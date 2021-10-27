@@ -455,6 +455,9 @@ int main (int argc, char** argv)
       gsVector<> xi;
       xi.setLinSpaced(100,times[0],times[times.size()-1]);
 
+      std::ofstream file;
+      file.open("ufit_0",std::ofstream::out);
+
       for (index_t k = 0; k!=xi.size(); k++)
       {
         fit.slice(2,xi.at(k),target);
@@ -478,37 +481,44 @@ int main (int argc, char** argv)
         }
         if (write)
         {
-            writeStepOutput(lambda,deformation, dirname + "/" + line, writePoints,1, 201);
+          gsVector<> U = assembler->constructSolutionVector(deformation);
+          file  << U.norm()<<","<<lambda<<"\n";
+          // writeStepOutput(lambda,deformation, dirname + "/" + line, writePoints,1, 201);
         }
       }
 
+      file.close();
+
+      file.open("udata_0",std::ofstream::out);
+
+      for (index_t k=0; k!= solutions.size(); k++)
       {
-        for (index_t k=0; k!= solutions.size(); k++)
+        assembler->constructSolution(solutions[k].first,mp_tmp);
+
+        real_t lambda = solutions[k].second;
+
+        real_t Time = times[k];
+
+        deformation.patch(0) = mp_tmp.patch(0);
+        deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
+
+        if (plot)
         {
-          assembler->constructSolution(solutions[k].first,mp_tmp);
-
-          real_t lambda = solutions[k].second;
-
-          real_t Time = times[k];
-
-          deformation.patch(0) = mp_tmp.patch(0);
-          deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
-
-          if (plot)
-          {
-            solField = gsField<>(mp,deformation);
-            std::string fileName = dirname + "/" + "data" + util::to_string(k);
-            gsWriteParaview<>(solField, fileName, 1000,mesh);
-            fileName = "data" + util::to_string(k) + "0";
-            datacollection.addTimestep(fileName,Time,".vts");
-            if (mesh) datacollection.addTimestep(fileName,Time,"_mesh.vtp");
-          }
-          if (write)
-          {
-              writeStepOutput(lambda,deformation, dirname + "/" + wn, writePoints,1, 201);
-          }
+          solField = gsField<>(mp,deformation);
+          std::string fileName = dirname + "/" + "data" + util::to_string(k);
+          gsWriteParaview<>(solField, fileName, 1000,mesh);
+          fileName = "data" + util::to_string(k) + "0";
+          datacollection.addTimestep(fileName,Time,".vts");
+          if (mesh) datacollection.addTimestep(fileName,Time,"_mesh.vtp");
+        }
+        if (write)
+        {
+          gsVector<> U = assembler->constructSolutionVector(deformation);
+          file  << U.norm()<<","<<lambda<<"\n";
+          // writeStepOutput(lambda,deformation, dirname + "/" + wn, writePoints,1, 201);
         }
       }
+      file.close();
 
       if (plot)
       {
@@ -573,6 +583,12 @@ int main (int argc, char** argv)
     /////[MPI] receive and compute error (rank 0)
       hierarchy.submit(ID,std::make_pair(arcLength.solutionU(),arcLength.solutionL()));
 
+      std::ofstream file;
+      file.open("unew_" + std::to_string(ID),std::ofstream::out);
+
+      file  << arcLength.solutionU().norm()<<","<<arcLength.solutionL()<<"\n";
+      file.close();
+
       bool success = hierarchy.getReference(ID,reference);
       if (success)
       {
@@ -580,6 +596,7 @@ int main (int argc, char** argv)
       }
       else
       {
+
         fit2.slice(2,ttmp+dLtmp,target);
         gsGeometry<real_t> * slice = target.clone().release();
         Lref  = slice->coefs()(0,3);
@@ -587,7 +604,14 @@ int main (int argc, char** argv)
         gsMultiPatch<> mp_tmp2(*slice);
         mp_tmp2.patch(0).coefs() -= mp.patch(0).coefs();
         Uref = assembler->constructSolutionVector(mp_tmp2);
+
+
       }
+
+      file.open("uref_" + std::to_string(ID),std::ofstream::out);
+      file  << Uref.norm()<<","<<Lref<<"\n";
+      file.close();
+
 
       gsDebugVar(Lref);
       gsDebugVar(Uref.norm());
@@ -615,8 +639,11 @@ int main (int argc, char** argv)
 
       initStepOutput(dirname + "/ID=" + std::to_string(ID) + "_" + line, writePoints);
       fit2 = gsSpaceTimeFit<3,real_t>(solutionCoefs,loads,gsAsVector<>(times),dbasis,deg_z);
+
       if (plot || write)
       {
+        file.open("ufit_" + std::to_string(ID),std::ofstream::out);
+
         gsVector<> xi;
         xi.setLinSpaced(100,times[0],times[times.size()-1]);
 
@@ -630,9 +657,35 @@ int main (int argc, char** argv)
           deformation.patch(0) = *slice;
           deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
 
-          writeStepOutput(lambda,deformation, dirname + "/ID=" + std::to_string(ID) + "_" + line, writePoints,1, 201);
+          gsVector<> U = assembler->constructSolutionVector(deformation);
+          file  << U.norm()<<","<<lambda<<"\n";
+          // writeStepOutput(lambda,deformation, dirname + "/ID=" + std::to_string(ID) + "_" + line, writePoints,1, 201);
+        }
+        file.close();
+      }
+
+
+      file.open("udata_" + std::to_string(ID),std::ofstream::out);
+      for (index_t k=0; k!= solutions.size(); k++)
+      {
+        assembler->constructSolution(solutions[k].first,mp_tmp);
+
+        real_t lambda = solutions[k].second;
+
+        real_t Time = times[k];
+
+        deformation.patch(0) = mp_tmp.patch(0);
+        deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
+
+        if (write)
+        {
+          gsVector<> U = assembler->constructSolutionVector(deformation);
+          file  << U.norm()<<","<<lambda<<"\n";
+          // writeStepOutput(lambda,deformation, dirname + "/" + wn, writePoints,1, 201);
         }
       }
+      file.close();
+
 
       gsVector<> DeltaU = Uref - arcLength.solutionU();
       real_t DeltaL = Lref - arcLength.solutionL();
@@ -658,7 +711,7 @@ int main (int argc, char** argv)
     /////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////
 
-    output = output + + "_refit";
+    output = output + "_refit";
 
     gsParaviewCollection collection2(dirname + "/" + output);
     gsParaviewCollection datacollection2(dirname + "/" + "data" + "_refit");
