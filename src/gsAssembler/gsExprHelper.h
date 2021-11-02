@@ -129,16 +129,15 @@ public:
     {
         expr::gsGeometryMap<T> gm;
         gm.setSource(mp);
-        gsDebugVar(gm.m_fs);
         return gm;
     }
 
-    geometryMap getMap(const gsMultiPatch<T> & mp)
-    {
-        expr::gsGeometryMap<T> gm;
-        gm.setSource(mp);
-        return gm;
-    }
+    // geometryMap getMap(const gsMultiPatch<T> & mp)
+    // {
+    //     expr::gsGeometryMap<T> gm;
+    //     gm.setSource(mp);
+    //     return gm;
+    // }
 
     expr::gsFeVariable<T> getVar(const gsFunctionSet<T> & mp, index_t dim = 1)
     {
