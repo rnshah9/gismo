@@ -15,8 +15,9 @@
 
 #include <gsKLShell/gsThinShellAssembler.h>
 #include <gsKLShell/getMaterialMatrix.h>
-// #include <gsThinShell/gsArcLengthIterator.h>
-#include <gsStructuralAnalysis/gsArcLengthIterator.h>
+#include <gsStructuralAnalysis/gsALMBase.h>
+#include <gsStructuralAnalysis/gsALMCrisfield.h>
+#include <gsStructuralAnalysis/gsHierarchicalALM.h>
 #include <gsStructuralAnalysis/gsSpaceTimeHierarchy.h>
 #include <gsStructuralAnalysis/gsSpaceTimeFitter.h>
 
@@ -313,34 +314,33 @@ int main (int argc, char** argv)
     assembler->assemble();
     gsVector<> Force = assembler->rhs();
 
-    gsArcLengthIterator<real_t> arcLength(Jacobian, ALResidual, Force);
+    gsALMBase<real_t> * arcLength;
+    arcLength = new gsALMCrisfield<real_t>(Jacobian, ALResidual, Force);
 
-    arcLength.options().setInt("Solver",0); // LDLT solver
-    arcLength.options().setInt("BifurcationMethod",0); // 0: determinant, 1: eigenvalue
-    arcLength.options().setInt("Method",method);
-    arcLength.options().setReal("Length",dL);
-    arcLength.options().setInt("AngleMethod",0); // 0: step, 1: iteration
-    arcLength.options().setSwitch("AdaptiveLength",adaptive);
-    arcLength.options().setInt("AdaptiveIterations",5);
-    arcLength.options().setReal("Scaling",0.0);
-    arcLength.options().setReal("Tol",tol);
-    arcLength.options().setReal("TolU",tolU);
-    arcLength.options().setReal("TolF",tolF);
-    arcLength.options().setInt("MaxIter",maxit);
-    arcLength.options().setSwitch("Verbose",true);
-    arcLength.options().setReal("Relaxation",relax);
+    arcLength->options().setInt("Solver",0); // LDLT solver
+    arcLength->options().setInt("BifurcationMethod",0); // 0: determinant, 1: eigenvalue
+    arcLength->options().setReal("Length",dL);
+    // arcLength->options().setInt("AngleMethod",0); // 0: step, 1: iteration
+    arcLength->options().setSwitch("AdaptiveLength",adaptive);
+    arcLength->options().setInt("AdaptiveIterations",5);
+    // arcLength->options().setReal("Scaling",0.0);
+    arcLength->options().setReal("Tol",tol);
+    arcLength->options().setReal("TolU",tolU);
+    arcLength->options().setReal("TolF",tolF);
+    arcLength->options().setInt("MaxIter",maxit);
+    arcLength->options().setSwitch("Verbose",true);
+    arcLength->options().setReal("Relaxation",relax);
     if (quasiNewtonInt>0)
     {
       quasiNewton = true;
-      arcLength.options().setInt("QuasiIterations",quasiNewtonInt);
+      arcLength->options().setInt("QuasiIterations",quasiNewtonInt);
     }
-    arcLength.options().setSwitch("Quasi",quasiNewton);
+    arcLength->options().setSwitch("Quasi",quasiNewton);
 
 
-    gsInfo<<arcLength.options();
-    arcLength.applyOptions();
-    arcLength.initialize();
-
+    gsInfo<<arcLength->options();
+    arcLength->applyOptions();
+    arcLength->initialize();
 
     gsMultiPatch<> deformation = mp;
 
@@ -353,7 +353,7 @@ int main (int argc, char** argv)
 
     gsMatrix<> solVector;
     real_t indicator = 0.0;
-    arcLength.setIndicator(indicator); // RESET INDICATOR
+    arcLength->setIndicator(indicator); // RESET INDICATOR
     real_t dL0 = dL;
 
 
@@ -389,14 +389,14 @@ int main (int argc, char** argv)
 
       gsInfo<<"Load step "<< k<<"\t"<<"dL = "<<dL<<"; curve time = "<<s<<"\n";
       // assembler->constructSolution(solVector,solution);
-      arcLength.step();
+      arcLength->step();
 
-      // gsInfo<<"m_U = "<<arcLength.solutionU()<<"\n";
-      if (!(arcLength.converged()))
+      // gsInfo<<"m_U = "<<arcLength->solutionU()<<"\n";
+      if (!(arcLength->converged()))
         GISMO_ERROR("Loop terminated, arc length method did not converge.\n");
 
-      real_t lambda = arcLength.solutionL();
-      solutions.push_back({arcLength.solutionU(),lambda});
+      real_t lambda = arcLength->solutionL();
+      solutions.push_back({arcLength->solutionU(),lambda});
       times.push_back(s);
     }
 
@@ -524,26 +524,26 @@ int main (int argc, char** argv)
       std::tie(Uold,Lold) = start;
       std::tie(Uguess,Lguess) = guess;
 
-      arcLength.setLength(dLtmp);
-      arcLength.setSolution(Uold,Lold);
-      arcLength.resetStep();
+      arcLength->setLength(dLtmp);
+      arcLength->setSolution(Uold,Lold);
+      arcLength->resetStep();
 
-      arcLength.setInitialGuess(Uguess,Lguess);
+      arcLength->setInitialGuess(Uguess,Lguess);
 
       gsInfo<<"Starting with ID "<<ID<<" from (lvl,|U|,L) = ("<<hierarchy.currentLevel(ID)<<","<<Uold.norm()<<","<<Lold<<"), curve time = "<<ttmp<<"\n";
 
       // if (make_pair)
       // {
-      //   arcLength.step();
-      //   hierarchy.submit(ID,std::make_pair(arcLength.solutionU(),arcLength.solutionL()));
+      //   arcLength->step();
+      //   hierarchy.submit(ID,std::make_pair(arcLength->solutionU(),arcLength->solutionL()));
       // }
       // else
       // {
-        arcLength.step();
-        hierarchy.submitLeft(ID,std::make_pair(arcLength.solutionU(),arcLength.solutionL()));
+        arcLength->step();
+        hierarchy.submitLeft(ID,std::make_pair(arcLength->solutionU(),arcLength->solutionL()));
 
-        arcLength.step();
-        hierarchy.submitRight(ID,std::make_pair(arcLength.solutionU(),arcLength.solutionL()));
+        arcLength->step();
+        hierarchy.submitRight(ID,std::make_pair(arcLength->solutionU(),arcLength->solutionL()));
       // }
 
       bool success = hierarchy.getReference(ID,reference);
@@ -564,10 +564,10 @@ int main (int argc, char** argv)
         Uref = assembler->constructSolutionVector(mp_tmp2);
       }
 
-      gsVector<> DeltaU = Uref - arcLength.solutionU();
-      real_t DeltaL = Lref - arcLength.solutionL();
+      gsVector<> DeltaU = Uref - arcLength->solutionU();
+      real_t DeltaL = Lref - arcLength->solutionL();
 
-      real_t error = arcLength.distance(DeltaU,DeltaL) / (dLtmp);
+      real_t error = arcLength->distance(DeltaU,DeltaL) / (dLtmp);
 
       gsDebugVar(error);
 
@@ -697,13 +697,13 @@ int main (int argc, char** argv)
     // std::tie(Uold,Lold) = solutions[level][time];
     // gsInfo<<"Starting from (lvl,|U|,L) = ("<<level<<","<<Uold.norm()<<","<<Lold<<")\n";
 
-    // arcLength.setLength(dLs[level+1]);
+    // arcLength->setLength(dLs[level+1]);
 
-    // arcLength.setSolution(Uold,Lold);
-    // arcLength.resetStep();
+    // arcLength->setSolution(Uold,Lold);
+    // arcLength->resetStep();
 
     // std::tie(Uguess,Lguess) = solutions[level][time+dts[level]]; /////////// FIX THIS!
-    // arcLength.setInitialGuess(Uguess,Lguess);
+    // arcLength->setInitialGuess(Uguess,Lguess);
 
     // for (index_t k=0; k!=2; k++)
     // {
@@ -721,11 +721,11 @@ int main (int argc, char** argv)
     //   solution_t refPoint = {refvec,refload};
     //   /// !Extract solution at time
 
-    //   arcLength.step();
+    //   arcLength->step();
 
-    //   gsVector<> DeltaU = refvec - arcLength.solutionU();
-    //   real_t DeltaL = refload - arcLength.solutionL();
-    //   real_t error = arcLength.distance(DeltaU,DeltaL) / (dLs[level]);
+    //   gsVector<> DeltaU = refvec - arcLength->solutionU();
+    //   real_t DeltaL = refload - arcLength->solutionL();
+    //   real_t error = arcLength->distance(DeltaU,DeltaL) / (dLs[level]);
 
     //   gsDebugVar(error);
 
@@ -772,7 +772,7 @@ int main (int argc, char** argv)
     //   gsInfo<<"\t\t\tLevel "<<level<<" (dL = "<<dLi<<") -- Fine Corrector\n";
     //   gsInfo<<"------------------------------------------------------------------------------------\n";
 
-    //   arcLength.setLength(dLi);
+    //   arcLength->setLength(dLi);
 
     //   for (index_t p=0; p<solutions[level-1].size()-1; p++)
     //   {
@@ -780,27 +780,27 @@ int main (int argc, char** argv)
     //     std::tie(Uold,Lold) = solutions[level-1].at(p);
     //     gsInfo<<"Starting from (lvl,|U|,L) = ("<<level-1<<","<<Uold.norm()<<","<<Lold<<")\n";
 
-    //     arcLength.setSolution(Uold,Lold);
-    //     arcLength.resetStep();
+    //     arcLength->setSolution(Uold,Lold);
+    //     arcLength->resetStep();
 
     //     std::tie(Uguess,Lguess) = solutions[level-1].at(p+1);
-    //     arcLength.setInitialGuess(Uguess,Lguess);
+    //     arcLength->setInitialGuess(Uguess,Lguess);
 
     //     for (index_t k=0; k<2; k++)
     //     {
     //       gsInfo<<"Load step "<< k<<"\t"<<"dL = "<<dLi<<"\n";
     //       // assembler->constructSolution(solVector,solution);
-    //       arcLength.step();
+    //       arcLength->step();
 
-    //       // gsInfo<<"m_U = "<<arcLength.solutionU()<<"\n";
-    //       if (!(arcLength.converged()))
+    //       // gsInfo<<"m_U = "<<arcLength->solutionU()<<"\n";
+    //       if (!(arcLength->converged()))
     //         GISMO_ERROR("Loop terminated, arc length method did not converge.\n");
 
-    //       real_t lambda = arcLength.solutionL();
-    //       solutions[level].push_back(std::make_pair(arcLength.solutionU(),lambda));
+    //       real_t lambda = arcLength->solutionL();
+    //       solutions[level].push_back(std::make_pair(arcLength->solutionU(),lambda));
     //     }
 
-    //     errors[level-1].at(p) = ( std::abs(solutions[level-1].at(p+1).second - arcLength.solutionL()) * Force.norm() + (solutions[level-1].at(p+1).first - arcLength.solutionU()).norm() ) / dLi;
+    //     errors[level-1].at(p) = ( std::abs(solutions[level-1].at(p+1).second - arcLength->solutionL()) * Force.norm() + (solutions[level-1].at(p+1).first - arcLength->solutionU()).norm() ) / dLi;
 
     //     // Store as 'refinement points' the points that are on the current level and do not satisfy the error
     //     if (errors[level-1].at(p) > ptol)
@@ -815,13 +815,13 @@ int main (int argc, char** argv)
     //     gsInfo<<"Finished.\n";
     //     // gsInfo<<"* Old solution (lvl,|U|,L) = ("<<level-1<<","<<solutions[level-1].at(p+1).second.norm()<<","<<solutions[level-1].at(p+1).first<<")\n";
     //     // gsInfo<<"* New solution (lvl,|U|,L) = ("<<level-1<<","
-    //     //                                     <<arcLength.solutionU().norm()<<","<<arcLength.solutionL()<<")\n";
+    //     //                                     <<arcLength->solutionU().norm()<<","<<arcLength->solutionL()<<")\n";
     //     // gsInfo<<"* Rel. Error   (lvl,|U|,L) = ("<<level-1<<","
-    //     //                                     <<(solutions[level-1].at(p+1).second - arcLength.solutionU()).norm() / solutions[level-1].at(p+1).second.norm()<<","
-    //     //                                     <<std::abs(solutions[level-1].at(p+1).first - arcLength.solutionL()) / solutions[level-1].at(p+1).first<<")\n";
+    //     //                                     <<(solutions[level-1].at(p+1).second - arcLength->solutionU()).norm() / solutions[level-1].at(p+1).second.norm()<<","
+    //     //                                     <<std::abs(solutions[level-1].at(p+1).first - arcLength->solutionL()) / solutions[level-1].at(p+1).first<<")\n";
     //     // gsInfo<<"* Rel. Error   (lvl,|U|,L) = ("<<0<<","
-    //     //                                     <<(solutions[0].at(p+1).second - arcLength.solutionU()).norm() / solutions[0].at(p+1).second.norm()<<","
-    //     //                                     <<std::abs(solutions[0].at(p+1).first - arcLength.solutionL()) / solutions[0].at(p+1).first<<")\n";
+    //     //                                     <<(solutions[0].at(p+1).second - arcLength->solutionU()).norm() / solutions[0].at(p+1).second.norm()<<","
+    //     //                                     <<std::abs(solutions[0].at(p+1).first - arcLength->solutionL()) / solutions[0].at(p+1).first<<")\n";
 
     //   }
     //   solutions.push_back(stepSolutions);
@@ -867,37 +867,37 @@ int main (int argc, char** argv)
                           // Get starting point
                           std::tie(Uold,Lold) = solutions[reflevel].at(pindex);
                           gsInfo<<"Starting from (lvl,|U|,L) = ("<<reflevel<<","<<Uold.norm()<<","<<Lold<<")\n";
-                          arcLength.setSolution(Uold,Lold);
-                          arcLength.resetStep();
+                          arcLength->setSolution(Uold,Lold);
+                          arcLength->resetStep();
 
                           solutions[level+1].push_back(std::make_pair(Uold,Lold));
 
                           // Get initial guess
                           std::tie(Uguess,Lguess) = solutions[reflevel].at(pindex+1);
-                          arcLength.setInitialGuess(Uguess,Lguess);
+                          arcLength->setInitialGuess(Uguess,Lguess);
 
                           // Set arc-length size
                           dLi = dL / (math::pow(2,level));
 
-                          arcLength.setLength(dLi);
+                          arcLength->setLength(dLi);
                           for (index_t k=0; k<2; k++)
                           {
                             gsInfo<<"Load step "<< k<<"\t"<<"dL = "<<dLi<<"\n";
                             // assembler->constructSolution(solVector,solution);
-                            arcLength.step();
+                            arcLength->step();
 
-                            // gsInfo<<"m_U = "<<arcLength.solutionU()<<"\n";
-                            if (!(arcLength.converged()))
+                            // gsInfo<<"m_U = "<<arcLength->solutionU()<<"\n";
+                            if (!(arcLength->converged()))
                               GISMO_ERROR("Loop terminated, arc length method did not converge.\n");
 
-                            real_t lambda = arcLength.solutionL();
+                            real_t lambda = arcLength->solutionL();
 
-                            solutions[level+1].push_back(std::make_pair(arcLength.solutionU(),lambda));
+                            solutions[level+1].push_back(std::make_pair(arcLength->solutionU(),lambda));
                             points.push_back(std::make_pair(level+1,std::make_pair(&solutions[level+1].at(solutions.size()-1).first,&solutions[level+1].at(solutions.size()-1).second)));
                           }
 
                           gsDebugVar(solutions[reflevel].at(pindex+1).second);
-                          errors[level].at(pindex) = ( std::abs(solutions[level].at(pindex+1).second - arcLength.solutionL()) * Force.norm() + (solutions[level].at(pindex+1).first - arcLength.solutionU()).norm() ) / dLi;
+                          errors[level].at(pindex) = ( std::abs(solutions[level].at(pindex+1).second - arcLength->solutionL()) * Force.norm() + (solutions[level].at(pindex+1).first - arcLength->solutionU()).norm() ) / dLi;
 
                           // Store as 'refinement points' the points that
                           if (errors[level].at(pindex) > ptol)
@@ -913,16 +913,16 @@ int main (int argc, char** argv)
 
 // gsInfo<<"Error: Loop terminated, arc length method did not converge.\n";
 // dL = dL / 2.;
-// arcLength.setLength(dL);
-// arcLength.setSolution(Uold,Lold);
+// arcLength->setLength(dL);
+// arcLength->setSolution(Uold,Lold);
 // bisected = true;
 // k -= 1;
 // continue;
 
 solVector = tuple.second;
-Uold = arcLength.solutionU();
-Lold = arcLength.solutionL();
-assembler->constructSolution(arcLength.solutionU(),mp_def);
+Uold = arcLength->solutionU();
+Lold = arcLength->solutionL();
+assembler->constructSolution(arcLength->solutionU(),mp_def);
 
 deformation = mp_def;
 deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
@@ -980,6 +980,7 @@ if (write)
 
 */
 
+  delete arcLength;
   return result;
 }
 

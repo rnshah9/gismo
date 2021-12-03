@@ -125,7 +125,7 @@ public:
         return m_mdata.begin()->second;
     }
 
-    geometryMap getMap(const gsFunction<T> & mp)
+    geometryMap getMap(const gsFunctionSet<T> & mp)
     {
         expr::gsGeometryMap<T> gm;
         gm.setSource(mp);

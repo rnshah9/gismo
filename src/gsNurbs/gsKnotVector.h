@@ -666,6 +666,9 @@ public:
     /// Adds \a amount to all the knots.
     void addConstant( T amount );
 
+    /// Adds \a amount to all the knots, starting at knot \a start.
+    void addConstant( T start, T amount );
+
 public: // things required by gsKnotVector
 
     /// \param uKnots unique knots (assumed to be sorted),

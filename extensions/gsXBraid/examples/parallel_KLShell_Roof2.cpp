@@ -145,7 +145,7 @@ int main(int argc, char **argv)
 #endif
 
   // Initialize the MPI environment
-  const gsMpi & mpi = gsMpi::init(argc, argv);
+  const gsMpi & mpi = gsMpi::init();
 
   // Get current wall time
   double wtime = mpi.wallTime();

@@ -439,7 +439,38 @@ int main (int argc, char** argv)
 
     gsTensorBSpline<3,real_t> fit = gsSpaceTimeFit<3,real_t>(solutionCoefs,loads,gsAsVector<>(times),dbasis,deg_z);
 
+    gsSpaceTimeFitter<2,3,real_t> fitter(solutionCoefs,loads,gsAsVector<>(times),dbasis,deg_z);
+    fitter.compute();
+
+
+
     typename gsTensorBSpline<3,real_t>::BoundaryGeometryType target;
+    gsField<> solField;
+
+    fit.slice(2,0.8,target);
+    gsGeometry<real_t> * slice = target.clone().release();
+    real_t lambda = slice->coefs()(0,3);
+    slice->embed(3);
+    gsDebugVar(lambda);
+
+    gsDebugVar(deformation.patch(0).coefs());
+
+    deformation.patch(0) = *slice;
+    deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
+
+    solField = gsField<>(mp,deformation);
+    gsWriteParaview(solField,"slice_ori");
+
+    std::pair<real_t,gsGeometry<real_t> *> pair = fitter.slice(0.8);
+    gsDebugVar(pair.first);
+
+    deformation.patch(0) = *(pair.second);
+    deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
+
+    gsDebugVar(deformation.patch(0).coefs());
+
+    solField = gsField<>(mp,deformation);
+    gsWriteParaview(solField,"slice_ori");
 
     /////[MPI] !make fit (rank 0)
 
@@ -448,7 +479,6 @@ int main (int argc, char** argv)
     gsParaviewCollection collection(dirname + "/" + output);
     gsParaviewCollection datacollection(dirname + "/" + "data");
 
-    gsField<> solField;
 
     if (plot || write)
     {
@@ -549,6 +579,8 @@ int main (int argc, char** argv)
     index_t it = 0;
     index_t itmax = 100;
     real_t TOL = 1e-2;
+
+    gsSpaceTimeFitter<2,3,real_t> fitter2(solutionCoefs,loads,gsAsVector<>(times),dbasis,deg_z);
 
     /////[MPI] !init hierarchy (rank 0)
     gsTensorBSpline<3,real_t> fit2 = gsSpaceTimeFit<3,real_t>(solutionCoefs,loads,gsAsVector<>(times),dbasis,deg_z);
