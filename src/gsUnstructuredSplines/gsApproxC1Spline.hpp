@@ -139,6 +139,9 @@ void gsApproxC1Spline<d,T>::init()
         gsKnotVector<T> kv_gluingData(basis_1.knots().unique(), p_tilde, r_tilde);
         gsBSplineBasis<T> basis_gluingData(kv_gluingData); // S(\tilde{p},\tilde{r},h)
 
+        gsTensorBSplineBasis<d, T> basis_patch_1 = dynamic_cast<gsTensorBSplineBasis<d, T> &>(m_multiBasis.basis(patch_1));
+        createGluingDataSpace(basis_patch_1, dir_1, basis_gluingData);
+
         m_bases[patch_1].setHelperBasis(side_1-1, 3, basis_gluingData);
         m_bases[patch_2].setHelperBasis(side_2-1, 3, basis_gluingData);
         // [!Gluing data space]

@@ -17,6 +17,11 @@
 namespace gismo
 {
 
+void createGluingDataSpace(gsTensorBSplineBasis<2, real_t> & basis_patch, index_t dir, gsBSplineBasis<real_t> & gD_space) {
+    gsInfo << "I am here \n";
+}
+
+
 // Input is parametric coordinates of 1-D \a mp
 template <class T>
 class gsAlpha : public gismo::gsFunction<T>

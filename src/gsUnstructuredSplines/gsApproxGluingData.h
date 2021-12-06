@@ -94,6 +94,8 @@ void gsApproxGluingData<d, T>::setGlobalGluingData(index_t patchID, index_t glob
     // ======== Space for gluing data : S^(p_tilde, r_tilde) _k ========
     gsBSplineBasis<T> bsp_gD = dynamic_cast<gsBSplineBasis<T>&>(m_auxPatches[patchID].getBasisRotated().getHelperBasis(globalSide-1, 3));
 
+    //createGluingDataSpace(m_auxPatches[patchID].getBasisRotated(), dir, bsp_gD);  m_auxPatches[patchID].getBasisRotated() == gsTensorBSpline
+
     //! [Problem setup]
     gsSparseSolver<real_t>::LU solver;
     gsExprAssembler<> A(1,1);
