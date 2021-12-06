@@ -20,6 +20,8 @@
 #include<gsIO/gsOptionList.h>
 #include<gsUnstructuredSplines/gsContainerBasisBase.h>
 
+#include <gsUnstructuredSplines/gsApproxC1Utils.h>
+
 namespace gismo
 {
 

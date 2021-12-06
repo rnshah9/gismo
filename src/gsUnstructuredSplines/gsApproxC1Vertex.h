@@ -13,6 +13,8 @@
 
 #pragma once
 
+#include <gsUnstructuredSplines/gsApproxC1Utils.h>
+
 #include <gsUnstructuredSplines/gsContainerBasis.h>
 #include <gsUnstructuredSplines/gsPatchReparameterized.h>
 #include <gsUnstructuredSplines/gsApproxGluingData.h>

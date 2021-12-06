@@ -16,6 +16,8 @@
 #include<gsUnstructuredSplines/gsApproxC1Edge.h>
 #include<gsUnstructuredSplines/gsApproxC1Vertex.h>
 
+#include <gsUnstructuredSplines/gsApproxC1Utils.h>
+
 namespace gismo
 {
 
@@ -140,7 +142,7 @@ void gsApproxC1Spline<d,T>::init()
         gsBSplineBasis<T> basis_gluingData(kv_gluingData); // S(\tilde{p},\tilde{r},h)
 
         gsTensorBSplineBasis<d, T> basis_patch_1 = dynamic_cast<gsTensorBSplineBasis<d, T> &>(m_multiBasis.basis(patch_1));
-        createGluingDataSpace(basis_patch_1, dir_1, basis_gluingData);
+        //createGluingDataSpace(basis_patch_1, dir_1, basis_gluingData);
 
         m_bases[patch_1].setHelperBasis(side_1-1, 3, basis_gluingData);
         m_bases[patch_2].setHelperBasis(side_2-1, 3, basis_gluingData);

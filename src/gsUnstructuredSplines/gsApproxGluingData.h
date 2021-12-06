@@ -15,7 +15,6 @@
 
 #include <gsUnstructuredSplines/gsApproxC1Utils.h>
 
-
 namespace gismo
 {
 

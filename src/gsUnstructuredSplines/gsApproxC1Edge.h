@@ -18,6 +18,8 @@
 
 #include <gsUnstructuredSplines/gsApproxGluingData.h>
 
+#include <gsUnstructuredSplines/gsApproxC1Utils.h>
+
 namespace gismo
 {
 
