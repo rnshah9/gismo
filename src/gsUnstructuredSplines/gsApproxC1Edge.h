@@ -60,8 +60,8 @@ public:
         //const index_t dir_2 = side_2 > 2 ? 0 : 1;
 
         m_auxPatches.clear();
-        m_auxPatches.push_back(gsPatchReparameterized<d,T>(m_mp.patch(patch_1), m_bases[patch_1]));
-        m_auxPatches.push_back(gsPatchReparameterized<d,T>(m_mp.patch(patch_2), m_bases[patch_2]));
+        m_auxPatches.push_back(gsPatchReparameterized<d,T>(m_mp.patch(patch_1), m_bases[patch_1], m_bases[patch_1].getBasis(0)));
+        m_auxPatches.push_back(gsPatchReparameterized<d,T>(m_mp.patch(patch_2), m_bases[patch_2], m_bases[patch_2].getBasis(0)));
 
         std::vector<index_t> sidesContainer(2);
         sidesContainer[0] = side_1;
@@ -124,10 +124,12 @@ public:
                 map.finalize();
 
                 gsBoundaryConditions<> bc_empty;
+                bc_empty.addCondition(dir == 0 ? 1 : 3, condition_type::dirichlet, 0); // Doesn't matter which side
                 u.setup(bc_empty, dirichlet::homogeneous, 0, map);
                 A.initSystem();
 
-                gsTraceBasis<real_t> traceBasis(geo, basis_plus, basis_geo, beta, false, bfID, dir);
+                gsMultiBasis<T> initSpace(m_auxPatches[patchID].getBasisRotated().getBasis(9));
+                gsTraceBasis<real_t> traceBasis(geo, basis_geo, beta, initSpace.basis(0), false, bfID, dir);
                 auto aa = A.getCoeff(traceBasis);
 
                 A.assemble(u * u.tr(), u * aa);
@@ -173,6 +175,7 @@ public:
                 map.finalize();
 
                 gsBoundaryConditions<> bc_empty;
+                bc_empty.addCondition(dir == 0 ? 1 : 3, condition_type::dirichlet, 0); // Doesn't matter which side
                 u.setup(bc_empty, dirichlet::homogeneous, 0, map);
                 A.initSystem();
 
@@ -233,7 +236,7 @@ public:
         //const index_t dir_1 = side_1 > 2 ? 0 : 1;
 
         m_auxPatches.clear();
-        m_auxPatches.push_back(gsPatchReparameterized<d,T>(m_mp.patch(patch_1), m_bases[patch_1]));
+        m_auxPatches.push_back(gsPatchReparameterized<d,T>(m_mp.patch(patch_1), m_bases[patch_1], m_bases[patch_1].getBasis(0)));
 
         reparametrizeSinglePatch(side_1);
 
@@ -287,10 +290,12 @@ public:
             map.finalize();
 
             gsBoundaryConditions<> bc_empty;
+            bc_empty.addCondition(dir == 0 ? 1 : 3, condition_type::dirichlet, 0); // Doesn't matter which side
             u.setup(bc_empty, dirichlet::homogeneous, 0, map);
             A.initSystem();
 
-            gsTraceBasis<real_t> traceBasis(geo, basis_plus, basis_geo, beta, true, bfID, dir);
+            gsMultiBasis<T> initSpace(m_auxPatches[patchID].getBasisRotated().getBasis(9));
+            gsTraceBasis<real_t> traceBasis(geo, basis_geo, beta, initSpace.basis(0), true, bfID, dir);
             auto aa = A.getCoeff(traceBasis);
 
             A.assemble(u * u.tr(), u * aa);
@@ -337,6 +342,7 @@ public:
             map.finalize();
 
             gsBoundaryConditions<> bc_empty;
+            bc_empty.addCondition(dir == 0 ? 1 : 3, condition_type::dirichlet, 0); // Doesn't matter which side
             u.setup(bc_empty, dirichlet::homogeneous, 0, map);
             A.initSystem();
 
