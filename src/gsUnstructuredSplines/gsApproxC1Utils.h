@@ -17,6 +17,10 @@
 namespace gismo
 {
 
+void createGluingDataSpace(gsTensorBSplineBasis<2, real_t> basis, index_t dir, gsBSplineBasis<real_t> & result);
+void createPlusSpace(gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & res_plus);
+void createMinusSpace(gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & res_minus);
+
 // Input is parametric coordinates of 1-D \a mp
 template <class T>
 class gsAlpha : public gismo::gsFunction<T>
@@ -154,9 +158,12 @@ class gsTraceBasis : public gismo::gsFunction<T>
 protected:
     gsGeometry<T> & _geo;
 
-    gsBasis<T> & m_basis_plus;
     gsBasis<T> & m_basis_geo;
     gsBSpline<T> & _m_basis_beta;
+
+    gsBSplineBasis<T> m_basis_plus2;
+
+    gsBasis<T> & m_basis;
 
     mutable gsMapData<T> _tmp;
 
@@ -174,16 +181,19 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     gsTraceBasis(gsGeometry<T> & geo,
-                 gsBasis<T> & basis_plus,
                  gsBasis<T> & basis_geo,
                  gsBSpline<T> & basis_beta,
+                 gsBasis<T> & basis,
                  bool isboundary,
                  const index_t bfID,
                  const index_t uv) :
-            _geo(geo), m_basis_plus(basis_plus), m_basis_geo(basis_geo), _m_basis_beta(basis_beta),
+            _geo(geo), m_basis_geo(basis_geo), _m_basis_beta(basis_beta), m_basis(basis),
             m_isboundary(isboundary), m_bfID(bfID), m_uv(uv), _traceBasis_piece(nullptr)
     {
         //_tmp.flags = NEED_JACOBIAN;
+
+        createPlusSpace(basis, m_uv, m_basis_plus2);
+
     }
 
     ~gsTraceBasis() { delete _traceBasis_piece; }
@@ -199,7 +209,7 @@ public:
     const gsFunction<T> & piece(const index_t k) const
     {
         //delete _traceBasis_piece;
-        _traceBasis_piece = new gsTraceBasis(_geo, m_basis_plus, m_basis_geo, _m_basis_beta,
+        _traceBasis_piece = new gsTraceBasis(_geo, m_basis_geo, _m_basis_beta, m_basis,
                                              m_isboundary, m_bfID, m_uv);
         return *_traceBasis_piece;
     }
@@ -225,8 +235,8 @@ public:
         m_basis_geo.evalSingle_into(0,u.row(1-m_uv),N_0); // u
         m_basis_geo.evalSingle_into(1,u.row(1-m_uv),N_1); // u
 
-        m_basis_plus.evalSingle_into(m_bfID,u.row(m_uv),N_i_plus); // v
-        m_basis_plus.derivSingle_into(m_bfID,u.row(m_uv),der_N_i_plus);
+        m_basis_plus2.evalSingle_into(m_bfID,u.row(m_uv),N_i_plus); // v
+        m_basis_plus2.derivSingle_into(m_bfID,u.row(m_uv),der_N_i_plus);
 
         gsMatrix<T> temp = beta.cwiseProduct(der_N_i_plus);
         result = N_i_plus.cwiseProduct(N_0 + N_1) - temp.cwiseProduct(N_1) * tau_1 / p;

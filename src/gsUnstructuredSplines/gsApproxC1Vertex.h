@@ -56,7 +56,7 @@ public:
         {
             index_t patch_1 = m_patchesAroundVertex[i];
 
-            m_auxPatches.push_back(gsPatchReparameterized<d,T>(m_mp.patch(patch_1), m_bases[patch_1]));
+            m_auxPatches.push_back(gsPatchReparameterized<d,T>(m_mp.patch(patch_1), m_bases[patch_1], m_bases[patch_1].getBasis(0)));
         }
 
         reparametrizeVertexPatches();

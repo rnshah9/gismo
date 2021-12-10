@@ -92,7 +92,9 @@ template<short_t d, class T>
 void gsApproxGluingData<d, T>::setGlobalGluingData(index_t patchID, index_t globalSide, index_t dir)
 {
     // ======== Space for gluing data : S^(p_tilde, r_tilde) _k ========
-    gsBSplineBasis<T> bsp_gD = dynamic_cast<gsBSplineBasis<T>&>(m_auxPatches[patchID].getBasisRotated().getHelperBasis(globalSide-1, 3));
+    //gsBSplineBasis<T> bsp_gD = dynamic_cast<gsBSplineBasis<T>&>(m_auxPatches[patchID].getBasisRotated().getHelperBasis(globalSide-1, 3));
+    gsBSplineBasis<T> bsp_gD;
+    createGluingDataSpace(m_auxPatches[patchID].getBasisRotated2(), dir, bsp_gD);
 
     //! [Problem setup]
     gsSparseSolver<real_t>::LU solver;
