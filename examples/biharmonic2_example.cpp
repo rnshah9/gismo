@@ -170,7 +170,8 @@ int main(int argc, char *argv[])
     //! [Solver loop]
     gsSparseSolver<>::SimplicialLDLT solver;
 
-    gsVector<> l2err(numRefine+1), h1err(numRefine+1), h2err(numRefine+1);
+    gsVector<> l2err(numRefine+1), h1err(numRefine+1), h2err(numRefine+1),
+    IFaceErr(numRefine+1);
     gsInfo<< "(dot1=approxC1construction, dot2=assembled, dot3=solved, dot4=got_error)\n"
         "\nDoFs: ";
     double setup_time(0), ma_time(0), slv_time(0), err_time(0);
@@ -247,7 +248,11 @@ int main(int argc, char *argv[])
         h2err[r]= h1err[r] +
                  math::sqrt(ev.integral( ( ihess(u_ex) - ihess(u_sol,G) ).sqNorm() * meas(G) )); // /ev.integral( ihess(f).sqNorm()*meas(G) )
 
-
+        //gsMatrix<> points(2,1);
+        //points.setConstant(0.2);
+        //gsDebugVar(math::sqrt(ev.integralInterface((igrad(u_sol.left(),G) - igrad(u_sol.right(),G)) * nv(G).normalized())));
+        //gsDebugVar(math::sqrt(ev.integralInterface((igrad(u_sol,G) - igrad(u_sol,G)) * nv(G).normalized())));
+        IFaceErr[r] = math::sqrt(ev.integralInterface((igrad(u_sol.left(),G.left()) - igrad(u_sol.right(),G.right())) * nv(G).normalized()));
 
         err_time += timer.stop();
         gsInfo<< ". " <<std::flush; // Error computations done
@@ -266,6 +271,7 @@ int main(int argc, char *argv[])
     gsInfo<< "\nL2 error: "<<std::scientific<<std::setprecision(3)<<l2err.transpose()<<"\n";
     gsInfo<< "H1 error: "<<std::scientific<<h1err.transpose()<<"\n";
     gsInfo<< "H2 error: "<<std::scientific<<h2err.transpose()<<"\n";
+    gsInfo<< "Deriv Interface error: "<<std::scientific<<IFaceErr.transpose()<<"\n";
 
     if (!last && numRefine>0)
     {
@@ -281,6 +287,10 @@ int main(int argc, char *argv[])
         gsInfo<<   "EoC (H2): "<< std::fixed<<std::setprecision(2)
               <<( h2err.head(numRefine).array() /
                   h2err.tail(numRefine).array() ).log().transpose() / std::log(2.0) <<"\n";
+
+        gsInfo<<   "EoC (Iface): "<< std::fixed<<std::setprecision(2)
+              <<( IFaceErr.head(numRefine).array() /
+                  IFaceErr.tail(numRefine).array() ).log().transpose() / std::log(2.0) <<"\n";
     }
     //! [Error and convergence rates]
 

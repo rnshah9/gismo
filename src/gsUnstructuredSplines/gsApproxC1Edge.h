@@ -52,8 +52,8 @@ public:
                 const gsOptionList & optionList)
                 : m_mp(mp), m_bases(bases), m_optionList(optionList)
     {
-        index_t side_1 = item.first().side().index();
-        index_t side_2 = item.second().side().index();
+        patchSide side_1 = item.first();
+        patchSide side_2 = item.second();
 
         index_t patch_1 = item.first().patch;
         index_t patch_2 = item.second().patch;
@@ -62,10 +62,10 @@ public:
         //const index_t dir_2 = side_2 > 2 ? 0 : 1;
 
         m_auxPatches.clear();
-        m_auxPatches.push_back(gsPatchReparameterized<d,T>(m_mp.patch(patch_1), m_bases[patch_1], m_bases[patch_1].getBasis(0)));
-        m_auxPatches.push_back(gsPatchReparameterized<d,T>(m_mp.patch(patch_2), m_bases[patch_2], m_bases[patch_2].getBasis(0)));
+        m_auxPatches.push_back(gsPatchReparameterized<d,T>(m_mp.patch(patch_1), m_bases[patch_1]));
+        m_auxPatches.push_back(gsPatchReparameterized<d,T>(m_mp.patch(patch_2), m_bases[patch_2]));
 
-        std::vector<index_t> sidesContainer(2);
+        std::vector<patchSide> sidesContainer(2);
         sidesContainer[0] = side_1;
         sidesContainer[1] = side_2;
 
@@ -81,12 +81,12 @@ public:
 
             index_t dir = patchID == 0 ? 1 : 0;
 
-            gsBSplineBasis<T> basis_plus = dynamic_cast<gsBSplineBasis<T> &>(m_auxPatches[patchID].getBasisRotated().getHelperBasis(
-                    sidesContainer[patchID] - 1, 0));
-            gsBSplineBasis<T> basis_minus = dynamic_cast<gsBSplineBasis<T> &>(m_auxPatches[patchID].getBasisRotated().getHelperBasis(
-                    sidesContainer[patchID] - 1, 1));
-            gsBSplineBasis<T> basis_geo = dynamic_cast<gsBSplineBasis<T> &>(m_auxPatches[patchID].getBasisRotated().getHelperBasis(
-                    sidesContainer[patchID] - 1, 2));
+            gsBSplineBasis<T> basis_plus, basis_minus;
+
+            gsMultiBasis<T> initSpace(m_auxPatches[patchID].getBasisRotated().piece(9));
+            createPlusSpace(initSpace.basis(0),dir, basis_plus);
+            createMinusSpace(initSpace.basis(0),dir, basis_minus);
+
             gsGeometry<T> &geo = m_auxPatches[patchID].getPatchRotated();
 
             gsBSpline<T> beta = approxGluingData.betaS(dir);
@@ -107,7 +107,8 @@ public:
 
                 // Elements used for numerical integration
                 gsMultiBasis<T> edgeSpace(
-                        m_auxPatches[patchID].getBasisRotated().getBasis(sidesContainer[patchID]));
+                        m_auxPatches[patchID].getBasisRotated().piece(sidesContainer[patchID]));
+
                 A.setIntegrationElements(edgeSpace);
                 gsExprEvaluator<> ev(A);
 
@@ -130,8 +131,7 @@ public:
                 u.setup(bc_empty, dirichlet::homogeneous, 0, map);
                 A.initSystem();
 
-                gsMultiBasis<T> initSpace(m_auxPatches[patchID].getBasisRotated().getBasis(9));
-                gsTraceBasis<real_t> traceBasis(geo, basis_geo, beta, initSpace.basis(0), false, bfID, dir);
+                gsTraceBasis<real_t> traceBasis(geo, beta, initSpace.basis(0), false, bfID, dir);
                 auto aa = A.getCoeff(traceBasis);
 
                 A.assemble(u * u.tr(), u * aa);
@@ -158,7 +158,7 @@ public:
 
                 // Elements used for numerical integration
                 gsMultiBasis<T> edgeSpace(
-                        m_auxPatches[patchID].getBasisRotated().getBasis(sidesContainer[patchID]));
+                        m_auxPatches[patchID].getBasisRotated().piece(sidesContainer[patchID]));
                 A.setIntegrationElements(edgeSpace);
                 gsExprEvaluator<> ev(A);
 
@@ -181,7 +181,7 @@ public:
                 u.setup(bc_empty, dirichlet::homogeneous, 0, map);
                 A.initSystem();
 
-                gsNormalDerivBasis<real_t> normalDerivBasis(geo, basis_minus, basis_geo, alpha, false, bfID, dir);
+                gsNormalDerivBasis<real_t> normalDerivBasis(geo, alpha, initSpace.basis(0), false, bfID, dir);
                 auto aa = A.getCoeff(normalDerivBasis);
 
                 A.assemble(u * u.tr(), u * aa);
@@ -238,7 +238,7 @@ public:
         //const index_t dir_1 = side_1 > 2 ? 0 : 1;
 
         m_auxPatches.clear();
-        m_auxPatches.push_back(gsPatchReparameterized<d,T>(m_mp.patch(patch_1), m_bases[patch_1], m_bases[patch_1].getBasis(0)));
+        m_auxPatches.push_back(gsPatchReparameterized<d,T>(m_mp.patch(patch_1), m_bases[patch_1]));
 
         reparametrizeSinglePatch(side_1);
 
@@ -248,12 +248,12 @@ public:
         index_t patchID = 0;
         index_t dir = patchID == 0 ? 1 : 0;
 
-        gsBSplineBasis<T> basis_plus = dynamic_cast<gsBSplineBasis<T> &>(m_auxPatches[patchID].getBasisRotated().getHelperBasis(
-                side_1 - 1, 0));
-        gsBSplineBasis<T> basis_minus = dynamic_cast<gsBSplineBasis<T> &>(m_auxPatches[patchID].getBasisRotated().getHelperBasis(
-                side_1 - 1, 1));
-        gsBSplineBasis<T> basis_geo = dynamic_cast<gsBSplineBasis<T> &>(m_auxPatches[patchID].getBasisRotated().getHelperBasis(
-                side_1 - 1, 2));
+        gsBSplineBasis<T> basis_plus, basis_minus;
+
+        gsMultiBasis<T> initSpace(m_auxPatches[patchID].getBasisRotated().piece(9));
+        createPlusSpace(initSpace.basis(0),dir, basis_plus);
+        createMinusSpace(initSpace.basis(0),dir, basis_minus);
+
         gsGeometry<T> &geo = m_auxPatches[patchID].getPatchRotated();
 
         gsBSpline<T> beta, alpha;
@@ -273,7 +273,7 @@ public:
 
             // Elements used for numerical integration
             gsMultiBasis<T> edgeSpace(
-                    m_auxPatches[patchID].getBasisRotated().getBasis(side_1));
+                    m_auxPatches[patchID].getBasisRotated().piece(side_1));
             A.setIntegrationElements(edgeSpace);
             gsExprEvaluator<> ev(A);
 
@@ -296,8 +296,7 @@ public:
             u.setup(bc_empty, dirichlet::homogeneous, 0, map);
             A.initSystem();
 
-            gsMultiBasis<T> initSpace(m_auxPatches[patchID].getBasisRotated().getBasis(9));
-            gsTraceBasis<real_t> traceBasis(geo, basis_geo, beta, initSpace.basis(0), true, bfID, dir);
+            gsTraceBasis<real_t> traceBasis(geo, beta, initSpace.basis(0), true, bfID, dir);
             auto aa = A.getCoeff(traceBasis);
 
             A.assemble(u * u.tr(), u * aa);
@@ -326,7 +325,7 @@ public:
 
             // Elements used for numerical integration
             gsMultiBasis<T> edgeSpace(
-                    m_auxPatches[patchID].getBasisRotated().getBasis(side_1));
+                    m_auxPatches[patchID].getBasisRotated().piece(side_1));
             A.setIntegrationElements(edgeSpace);
             gsExprEvaluator<> ev(A);
 
@@ -348,7 +347,7 @@ public:
             u.setup(bc_empty, dirichlet::homogeneous, 0, map);
             A.initSystem();
 
-            gsNormalDerivBasis<real_t> normalDerivBasis(geo, basis_minus, basis_geo, alpha, true, bfID, dir);
+            gsNormalDerivBasis<real_t> normalDerivBasis(geo, alpha, initSpace.basis(0), true, bfID, dir);
             auto aa = A.getCoeff(normalDerivBasis);
 
             A.assemble(u * u.tr(), u * aa);
@@ -410,6 +409,8 @@ private:
     void reparametrizeInterfacePatches();
 
     void reparametrizeSinglePatch(index_t side);
+
+    void compute();
 
 }; // Class gsApproxC1Edge
 

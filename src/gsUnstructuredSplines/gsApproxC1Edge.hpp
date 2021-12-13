@@ -21,6 +21,10 @@
 
 namespace gismo
 {
+    template<short_t d,class T>
+    void gsApproxC1Edge<d,T>::compute() {
+
+}
 
 
     template<short_t d,class T>
@@ -29,10 +33,7 @@ namespace gismo
         for(unsigned i = 0; i <  m_auxPatches.size(); i++)
         {
             if(m_auxPatches[i].getPatchRotated().orientation() == -1)
-            {
                 m_auxPatches[i].swapAxis();
-                //gsInfo << "Changed axis on patch: " << i << "\n";
-            }
         }
     }
 

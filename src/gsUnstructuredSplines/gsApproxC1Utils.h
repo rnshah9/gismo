@@ -17,25 +17,16 @@
 
 namespace gismo
 {
-<<<<<<< HEAD
-/*
-void createGluingDataSpace(gsTensorBSplineBasis<2, real_t> & basis_patch, index_t dir, gsBSplineBasis<real_t> & gD_space){
-    gsInfo << "I am here \n";
-}
-*/
-=======
 
-<<<<<<< HEAD
-void createGluingDataSpace(gsTensorBSplineBasis<2, real_t> & basis_patch, index_t dir, gsBSplineBasis<real_t> & gD_space) {
-    gsInfo << "I am here \n";
-}
-
-=======
-void createGluingDataSpace(gsTensorBSplineBasis<2, real_t> basis, index_t dir, gsBSplineBasis<real_t> & result);
+void createGluingDataSpace(const gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & result);
 void createPlusSpace(gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & res_plus);
 void createMinusSpace(gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & res_minus);
->>>>>>> msplines_shell_pascal2
->>>>>>> ab8760e8cf8f5f01b6a77c5d03a539c91fe6b20c
+void createEdgeSpace(gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & basis_plus,
+                     gsBSplineBasis<real_t> & basis_minus, gsBSplineBasis<real_t> & basis_gD,
+                     gsTensorBSplineBasis<2, real_t> & result);
+void createEdgeSpace(gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & basis_plus,
+                     gsBSplineBasis<real_t> & basis_minus, gsTensorBSplineBasis<2, real_t> & result);
+void createVertexSpace(gsBasis<real_t> & basis, bool isInterface_1, bool isInterface_2, gsTensorBSplineBasis<2, real_t> & result);
 
 // Input is parametric coordinates of 1-D \a mp
 template <class T>
@@ -174,10 +165,8 @@ class gsTraceBasis : public gismo::gsFunction<T>
 protected:
     gsGeometry<T> & _geo;
 
-    gsBasis<T> & m_basis_geo;
     gsBSpline<T> & _m_basis_beta;
-
-    gsBSplineBasis<T> m_basis_plus2;
+    gsBSplineBasis<T> m_basis_plus;
 
     gsBasis<T> & m_basis;
 
@@ -197,19 +186,17 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     gsTraceBasis(gsGeometry<T> & geo,
-                 gsBasis<T> & basis_geo,
                  gsBSpline<T> & basis_beta,
                  gsBasis<T> & basis,
                  bool isboundary,
                  const index_t bfID,
                  const index_t uv) :
-            _geo(geo), m_basis_geo(basis_geo), _m_basis_beta(basis_beta), m_basis(basis),
+            _geo(geo), _m_basis_beta(basis_beta), m_basis(basis),
             m_isboundary(isboundary), m_bfID(bfID), m_uv(uv), _traceBasis_piece(nullptr)
     {
         //_tmp.flags = NEED_JACOBIAN;
 
-        createPlusSpace(basis, m_uv, m_basis_plus2);
-
+        createPlusSpace(basis, m_uv, m_basis_plus);
     }
 
     ~gsTraceBasis() { delete _traceBasis_piece; }
@@ -225,7 +212,7 @@ public:
     const gsFunction<T> & piece(const index_t k) const
     {
         //delete _traceBasis_piece;
-        _traceBasis_piece = new gsTraceBasis(_geo, m_basis_geo, _m_basis_beta, m_basis,
+        _traceBasis_piece = new gsTraceBasis(_geo, _m_basis_beta, m_basis,
                                              m_isboundary, m_bfID, m_uv);
         return *_traceBasis_piece;
     }
@@ -236,7 +223,7 @@ public:
         result.resize( targetDim() , u.cols() );
 
         // tau/p
-        gsBSplineBasis<T> bsp_temp = dynamic_cast<gsBSplineBasis<> & >(m_basis_geo);
+        gsBSplineBasis<T> bsp_temp = dynamic_cast<gsBSplineBasis<> & >(m_basis.component(1-m_uv));
 
         real_t p = bsp_temp.degree();
         real_t tau_1 = bsp_temp.knots().at(p + 1); // p + 2
@@ -248,11 +235,11 @@ public:
         else
             beta.setZero(1, u.cols());
 
-        m_basis_geo.evalSingle_into(0,u.row(1-m_uv),N_0); // u
-        m_basis_geo.evalSingle_into(1,u.row(1-m_uv),N_1); // u
+        m_basis.component(1-m_uv).evalSingle_into(0,u.row(1-m_uv),N_0); // u
+        m_basis.component(1-m_uv).evalSingle_into(1,u.row(1-m_uv),N_1); // u
 
-        m_basis_plus2.evalSingle_into(m_bfID,u.row(m_uv),N_i_plus); // v
-        m_basis_plus2.derivSingle_into(m_bfID,u.row(m_uv),der_N_i_plus);
+        m_basis_plus.evalSingle_into(m_bfID,u.row(m_uv),N_i_plus); // v
+        m_basis_plus.derivSingle_into(m_bfID,u.row(m_uv),der_N_i_plus);
 
         gsMatrix<T> temp = beta.cwiseProduct(der_N_i_plus);
         result = N_i_plus.cwiseProduct(N_0 + N_1) - temp.cwiseProduct(N_1) * tau_1 / p;
@@ -268,9 +255,10 @@ class gsNormalDerivBasis : public gismo::gsFunction<T>
 protected:
     gsGeometry<T> & _geo;
 
-    gsBasis<T> & m_basis_minus;
-    gsBasis<T> & m_basis_geo;
     gsBSpline<T> & m_basis_alpha;
+    gsBasis<T> & m_basis;
+
+    gsBSplineBasis<T> m_basis_minus;
 
     mutable gsMapData<T> _tmp;
 
@@ -288,16 +276,16 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     gsNormalDerivBasis(gsGeometry<T> & geo,
-                 gsBasis<T> & basis_minus,
-                 gsBasis<T> & basis_geo,
                  gsBSpline<T> & basis_alpha,
+                 gsBasis<T> & basis,
                  bool isboundary,
                  const index_t bfID,
                  const index_t uv) :
-            _geo(geo), m_basis_minus(basis_minus), m_basis_geo(basis_geo), m_basis_alpha(basis_alpha),
+            _geo(geo), m_basis_alpha(basis_alpha), m_basis(basis),
             m_isboundary(isboundary), m_bfID(bfID), m_uv(uv), _normalDerivBasis_piece(nullptr)
     {
         //_tmp.flags = NEED_JACOBIAN;
+        createMinusSpace(basis, m_uv, m_basis_minus);
     }
 
     ~gsNormalDerivBasis() { delete _normalDerivBasis_piece; }
@@ -313,7 +301,7 @@ public:
     const gsFunction<T> & piece(const index_t k) const
     {
         //delete _normalDerivBasis_piece;
-        _normalDerivBasis_piece = new gsNormalDerivBasis(_geo, m_basis_minus, m_basis_geo, m_basis_alpha,
+        _normalDerivBasis_piece = new gsNormalDerivBasis(_geo, m_basis_alpha, m_basis,
                                              m_isboundary, m_bfID, m_uv);
         return *_normalDerivBasis_piece;
     }
@@ -324,7 +312,7 @@ public:
         result.resize( targetDim() , u.cols() );
 
         // tau/p
-        gsBSplineBasis<T> bsp_temp = dynamic_cast<gsBSplineBasis<> & >(m_basis_geo);
+        gsBSplineBasis<T> bsp_temp = dynamic_cast<gsBSplineBasis<> & >(m_basis.component(1-m_uv));
 
         real_t p = bsp_temp.degree();
         real_t tau_1 = bsp_temp.knots().at(p + 1); // p + 2
@@ -336,7 +324,7 @@ public:
         else
             alpha.setOnes(1, u.cols());
 
-        m_basis_geo.evalSingle_into(1,u.row(1-m_uv),N_1); // u
+        m_basis.component(1-m_uv).evalSingle_into(1,u.row(1-m_uv),N_1); // u
 
         m_basis_minus.evalSingle_into(m_bfID,u.row(m_uv),N_j_minus); // v
 
@@ -355,11 +343,13 @@ class gsVertexBasis : public gismo::gsFunction<T>
 
 protected:
     const gsGeometry<T>    & m_geo;
-    std::vector<gsBSplineBasis<T>>       & m_basis_plus;
-    std::vector<gsBSplineBasis<T>>       & m_basis_minus;
-    std::vector<gsBSplineBasis<T>>       & m_basis_geo;
+    gsBasis<T> & m_basis;
+
     std::vector<gsBSpline<T>>            & m_alpha;
     std::vector<gsBSpline<T>>            & m_beta;
+
+    std::vector<gsBSplineBasis<T>>       m_basis_plus;
+    std::vector<gsBSplineBasis<T>>       m_basis_minus;
 
     const real_t & m_sigma;
     const std::vector<bool> & m_kindOfEdge;
@@ -378,19 +368,27 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     gsVertexBasis(const gsGeometry<T>    & geo,
-                  std::vector<gsBSplineBasis<T>>       & basis_plus,
-                  std::vector<gsBSplineBasis<T>>       & basis_minus,
-                  std::vector<gsBSplineBasis<T>>       & basis_geo,
+                  gsBasis<T> & basis,
                   std::vector<gsBSpline<T>>& alpha,
                   std::vector<gsBSpline<T>>& beta,
                   const real_t & sigma,
                   const std::vector<bool> & kindOfEdge,
                   const index_t bfID
-            ) : m_geo(geo), m_basis_plus(basis_plus), m_basis_minus(basis_minus), m_basis_geo(basis_geo),
+            ) : m_geo(geo), m_basis(basis),
             m_alpha(alpha), m_beta(beta), m_sigma(sigma), m_kindOfEdge(kindOfEdge), m_bfID(bfID),
             _vertexBasis_piece(nullptr)
     {
         //_tmp.flags = NEED_JACOBIAN;
+        m_basis_plus.clear(); m_basis_minus.clear();
+        for (index_t i = 0; i < m_basis.domainDim(); i++)
+        {
+            gsBSplineBasis<T> basis1, basis2;
+            createPlusSpace(basis, i, basis1);
+            createMinusSpace(basis, i, basis2);
+
+            m_basis_plus.push_back(basis1);
+            m_basis_minus.push_back(basis2);
+        }
     }
 
     ~gsVertexBasis() { delete _vertexBasis_piece; }
@@ -406,7 +404,7 @@ public:
     const gsFunction<T> & piece(const index_t k) const
     {
         //delete _vertexBasis_piece;
-        _vertexBasis_piece = new gsVertexBasis(m_geo, m_basis_plus, m_basis_minus, m_basis_geo, m_alpha,
+        _vertexBasis_piece = new gsVertexBasis(m_geo, m_basis, m_alpha,
                                                m_beta, m_sigma, m_kindOfEdge, m_bfID);
         return *_vertexBasis_piece;
     }
@@ -445,12 +443,12 @@ public:
             gsMatrix<> b_0_plus_deriv, b_1_plus_deriv, b_2_plus_deriv;
             gsMatrix<> b_0_minus, b_1_minus;
 
-            gsBSplineBasis<T> bsp_temp = dynamic_cast<gsBSplineBasis<> & >(m_basis_geo[1-i]);
+            gsBSplineBasis<T> bsp_temp = dynamic_cast<gsBSplineBasis<> & >(m_basis.component(1-i));
             real_t p = bsp_temp.degree();
             real_t h_geo = bsp_temp.knots().at(p + 1);
 
-            m_basis_geo[1-i].evalSingle_into(0, u.row(i),b_0); // first
-            m_basis_geo[1-i].evalSingle_into(1, u.row(i),b_1); // second
+            m_basis.component(1-i).evalSingle_into(0, u.row(i),b_0); // first
+            m_basis.component(1-i).evalSingle_into(1, u.row(i),b_1); // second
 
             m_basis_plus[i].evalSingle_into(0, u.row(i),b_0_plus);
             m_basis_plus[i].evalSingle_into(1, u.row(i),b_1_plus);

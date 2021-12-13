@@ -758,6 +758,9 @@ public:
     /// @brief Returns (the coordinates of) an element in the support
     /// of basis function \a j
     virtual gsMatrix<T> elementInSupportOf(index_t j) const;
+
+    /// @brief Returns a reference to the knot vector in direction \a i
+    virtual const gsKnotVector<T> & knots(index_t i) const;
     
     /// @brief For a tensor product basis, return the (const) 1-d
     /// basis for the \a i-th parameter component.

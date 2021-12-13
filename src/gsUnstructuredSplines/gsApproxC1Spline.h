@@ -11,10 +11,6 @@
     Author(s): P. Weinmueller
 */
 
-/*
-    TO DO
- */
-
 #pragma once
 
 #include<gsIO/gsOptionList.h>

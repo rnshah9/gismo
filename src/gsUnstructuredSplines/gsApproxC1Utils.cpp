@@ -18,9 +18,9 @@
 
 namespace gismo
 {
-    void createGluingDataSpace(gsTensorBSplineBasis<2, real_t> basis, index_t dir, gsBSplineBasis<real_t> & result)
+    void createGluingDataSpace(const gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & result)
     {
-        gsBSplineBasis<real_t> basis_1 = dynamic_cast<gsBSplineBasis<real_t> &>(basis.component(dir));
+        const gsBSplineBasis<real_t> basis_1 = dynamic_cast<const gsBSplineBasis<real_t> &>(basis.component(dir));
 
         index_t p_tilde = basis_1.degree() - 1;
         index_t r_tilde = p_tilde - 1;
@@ -58,6 +58,91 @@ namespace gismo
         if (m != 1)
             result.reduceContinuity(1);
 
+    }
+
+    void createEdgeSpace(gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & basis_plus,
+                        gsBSplineBasis<real_t> & basis_minus, gsBSplineBasis<real_t> & basis_gluingData,
+                        gsTensorBSplineBasis<2, real_t> & result)
+    {
+        gsTensorBSplineBasis<2, real_t> basis_edge = dynamic_cast<gsTensorBSplineBasis<2, real_t> &>(basis);
+
+        basis_edge.component(dir).setDegreePreservingMultiplicity(basis_plus.degree()+basis_gluingData.degree()-1);
+
+        index_t r_plus, r_minus, r_edge, r_gD, r;
+        r_plus = basis_plus.degree() - basis_plus.knots().multiplicityIndex(basis_plus.degree()+1); // p+1, since c++ starts at 0
+        r_minus = basis_minus.degree() - basis_minus.knots().multiplicityIndex(basis_minus.degree()+1);
+        r_gD = basis_gluingData.degree() - basis_gluingData.knots().multiplicityIndex(basis_gluingData.degree()+1);
+        r_edge = basis_edge.degree(dir) - basis_edge.knots(dir).multiplicityIndex(basis_edge.degree(dir)+1);
+
+        r = math::min(r_gD, math::min(r_plus, r_minus));
+        if (r_edge > r)
+            basis_edge.component(dir).reduceContinuity(r_edge - r);
+        else if (r_edge < r)
+            basis_edge.component(dir).elevateContinuity(r - r_edge);
+
+        result = gsTensorBSplineBasis<2, real_t>(basis_edge);
+    }
+
+    void createEdgeSpace(gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & basis_plus,
+                        gsBSplineBasis<real_t> & basis_minus, gsTensorBSplineBasis<2, real_t> & result)
+    {
+        gsTensorBSplineBasis<2, real_t> basis_edge = dynamic_cast<gsTensorBSplineBasis<2, real_t> &>(basis);
+
+        basis_edge.component(dir).setDegreePreservingMultiplicity(basis_plus.degree());
+
+        index_t r_plus, r_minus, r_edge, r;
+        r_plus = basis_plus.degree() - basis_plus.knots().multiplicityIndex(basis_plus.degree()+1); // p+1, since c++ starts at 0
+        r_minus = basis_minus.degree() - basis_minus.knots().multiplicityIndex(basis_minus.degree()+1);
+        r_edge = basis_edge.degree(dir) - basis_edge.knots(dir).multiplicityIndex(basis_edge.degree(dir)+1);
+
+        r = math::min(r_plus, r_minus);
+        if (r_edge > r)
+            basis_edge.component(dir).reduceContinuity(r_edge - r);
+        else if (r_edge < r)
+            basis_edge.component(dir).elevateContinuity(r - r_edge);
+
+        result = gsTensorBSplineBasis<2, real_t>(basis_edge);
+    }
+
+    // Corner Vertex
+    void createVertexSpace(gsBasis<real_t> & basis, bool isInterface_1, bool isInterface_2, gsTensorBSplineBasis<2, real_t> & result)
+    {
+        gsTensorBSplineBasis<2, real_t> basis_vertex = dynamic_cast<gsTensorBSplineBasis<2, real_t> &>(basis);
+
+        for (index_t dir = 0; dir < basis.domainDim(); dir ++)
+        {
+            if (dir == 0 ? isInterface_1 : isInterface_2) // If edge is an interface
+            {
+                gsBSplineBasis<real_t> basis_gluingData, basis_plus, basis_minus;
+                createGluingDataSpace(basis, dir, basis_gluingData);
+                createPlusSpace(basis, dir, basis_plus);
+                createMinusSpace(basis, dir, basis_minus);
+
+                basis_vertex.component(dir).setDegreePreservingMultiplicity(basis_plus.degree()+basis_gluingData.degree()-1);
+
+                index_t r_plus, r_minus, r_edge, r_gD, r;
+                r_plus = basis_plus.degree() - basis_plus.knots().multiplicityIndex(basis_plus.degree()+1); // p+1, since c++ starts at 0
+                r_minus = basis_minus.degree() - basis_minus.knots().multiplicityIndex(basis_minus.degree()+1);
+                r_gD = basis_gluingData.degree() - basis_gluingData.knots().multiplicityIndex(basis_gluingData.degree()+1);
+                r_edge = basis_vertex.degree(dir) - basis_vertex.knots(dir).multiplicityIndex(basis_vertex.degree(dir)+1);
+
+                r = math::min(r_gD, math::min(r_plus, r_minus));
+                if (r_edge > r)
+                    basis_vertex.component(dir).reduceContinuity(r_edge - r);
+                else if (r_edge < r)
+                    basis_vertex.component(dir).elevateContinuity(r - r_edge);
+            }
+            else
+            {
+                index_t r_12, p_12;
+                p_12 = basis.degree(dir);
+                r_12 = p_12 - basis.knots(dir).multiplicityIndex(p_12+1);
+                if (r_12 == p_12 - 1) // == basis_vertex_1.degree(1)
+                    basis_vertex.component(dir).reduceContinuity(1); // In the case for the max. smoothness
+            }
+        }
+
+        result = gsTensorBSplineBasis<2, real_t>(basis_vertex);
     }
 
 }

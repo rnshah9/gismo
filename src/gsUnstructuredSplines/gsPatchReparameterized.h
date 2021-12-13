@@ -26,8 +26,8 @@ public:
     gsPatchReparameterized()
     {}
 
-    gsPatchReparameterized(const gsGeometry<> & patch, gsContainerBasis<d,T> & singlePatch, gsTensorBSplineBasis<d, T> singleBasis = gsTensorBSplineBasis<d, T>())
-    : m_patchRotated(patch), m_basisRotated(singlePatch), m_basisRotated2(singleBasis)
+    gsPatchReparameterized(const gsGeometry<> & patch, gsBasis<T> & singlePatch)
+    : m_patchRotated(patch), m_basisRotated(singlePatch)
     {
         rotationNum = 0;
         axisOrientation = 0;
@@ -65,8 +65,8 @@ public:
         m_patchRotated.swap(newpatch);
 
         // BASES
-        m_basisRotated.swapAxis();
-        //m_basisRotated2.swapAxis();
+        //m_basisRotated.swapAxis();
+        m_basisRotated.basis(0).reverse();
 
         // Map Index
         mapIndex[0] = 3;
@@ -105,8 +105,8 @@ public:
         m_patchRotated.swap(newpatch);
 
         // BASES
-        m_basisRotated.swapAxis();
-        //m_basisRotated2.swapAxis();
+        //m_basisRotated.swapAxis();
+        m_basisRotated.basis(0).reverse();
 
         // Map Index
         if (getOrient() == 0)
@@ -157,8 +157,9 @@ public:
         m_patchRotated.swap(newpatch);
 
         // BASES
-        m_basisRotated.swapAxis();
-        //m_basisRotated2.swapAxis();
+        //m_basisRotated.swapAxis();
+        m_basisRotated.basis(0).reverse();
+
 
         // Map Index
         if (getOrient() == 0)
@@ -402,8 +403,7 @@ public:
     }
 
     gsGeometry<T> & getPatchRotated() { return m_patchRotated.patch(0); }
-    gsContainerBasis<d, T> getBasisRotated() const { return m_basisRotated; }
-    gsTensorBSplineBasis<d,T> getBasisRotated2() const { return m_basisRotated2; }
+    gsBasis<T> & getBasisRotated() { return m_basisRotated.basis(0); }
 
     index_t getMapIndex(index_t glSide) const { return mapIndex[glSide-1]; }
 
@@ -411,9 +411,7 @@ protected:
 
     gsMultiPatch<T> m_patchRotated;
 
-    gsContainerBasis<d, T> m_basisRotated;
-
-    gsTensorBSplineBasis<d,T> m_basisRotated2;
+    gsMultiBasis<T> m_basisRotated;
 
     // Referenz to initial geometry
     gsVector<index_t> mapIndex;

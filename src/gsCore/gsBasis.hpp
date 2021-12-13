@@ -536,6 +536,10 @@ gsMatrix<T> gsBasis<T>::elementInSupportOf(index_t j) const
 { GISMO_NO_IMPLEMENTATION }
 
 template<class T>
+const gsKnotVector<T> & gsBasis<T>::knots(index_t i) const
+{ GISMO_NO_IMPLEMENTATION }
+
+template<class T>
 const gsBasis<T>& gsBasis<T>::component(short_t) const
 { GISMO_NO_IMPLEMENTATION }
 
