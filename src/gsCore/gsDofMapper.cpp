@@ -574,7 +574,7 @@ gsVector<index_t> gsDofMapper::find_impl(Iterator istart, Iterator iend, Predica
 
 gsVector<index_t> gsDofMapper::findBoundary(const index_t k) const
 {
-    GISMO_ASSERT(m_curElimId==0, "finalize() was not called on gsDofMapper");
+    GISMO_ASSERT(m_curElimId>=0, "finalize() was not called on gsDofMapper");
     GISMO_ASSERT(static_cast<size_t>(k)<numPatches(), "Invalid patch index "<< k <<" >= "<< numPatches() );
     const index_t s = m_numFreeDofs.back() + m_shift - 1;
     typedef std::vector<index_t>::const_iterator citer;
@@ -585,7 +585,7 @@ gsVector<index_t> gsDofMapper::findBoundary(const index_t k) const
 
 gsVector<index_t> gsDofMapper::findFree(const index_t k) const
 {
-    GISMO_ASSERT(m_curElimId==0, "finalize() was not called on gsDofMapper");
+    GISMO_ASSERT(m_curElimId>=0, "finalize() was not called on gsDofMapper");
     GISMO_ASSERT(static_cast<size_t>(k)<numPatches(), "Invalid patch index "<< k <<" >= "<< numPatches() );
     const index_t s = m_numFreeDofs.back() + m_shift;
     typedef std::vector<index_t>::const_iterator citer;

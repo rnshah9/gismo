@@ -1075,12 +1075,12 @@ public:
                     else
                         m_sd->mapper.markBoundary(it->ps.patch, bnd, cc);
                 }
-/*
-                // Not always working bcs of boundaryOffset
-                // Enfore Neumann weakly!!!
 
+                // Not always working bcs of boundaryOffset
+                // Enfore Neumann strongly!!!
+/*
                 for (typename gsBoundaryConditions<real_t>::const_iterator
-                             it = bc.begin("Neumann"); it != bc.end("Neumann"); ++it) {
+                             it = bc.begin("Strong Neumann"); it != bc.end("Strong Neumann"); ++it) {
                     const index_t cc = it->unkComponent();
 
                     bnd = mapb->basis(it->ps.patch).boundaryOffset(it->ps.side(),1);

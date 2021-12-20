@@ -31,6 +31,7 @@ namespace gismo
             dirichlet = 0, ///< Dirichlet type
             weak_dirichlet = 10, ///< Dirichlet type
             neumann   = 1, ///< Neumann type
+            strong_neumann   = 6, ///< Neumann type for the space
             robin     = 2, ///< Robin type
             clamped   = 3, ///< Robin type
             weak_clamped = 30,
@@ -88,6 +89,11 @@ namespace gismo
                 os<< "Laplace";
                 break;
             }
+            case condition_type::strong_neumann:
+            {
+                os<< "Strong Neumann";
+                break;
+            }
             default:
                 os<< "condition type not known.\n";
         };
@@ -125,6 +131,7 @@ namespace gismo
             else if (m_label == "Weak Clamped")   m_type = condition_type::weak_clamped;
             else if (m_label == "Collapsed") m_type = condition_type::collapsed;
             else if (m_label == "Laplace") m_type = condition_type::laplace;
+            else if (m_label == "Strong Neumann") m_type = condition_type::strong_neumann;
             else m_type = condition_type::unknownType;
         }
 
@@ -179,6 +186,11 @@ namespace gismo
                 case condition_type::laplace:
                 {
                     m_label = "Laplace";
+                    break;
+                }
+                case condition_type::strong_neumann:
+                {
+                    m_label = "Strong Neumann";
                     break;
                 }
                 default:
@@ -238,6 +250,11 @@ namespace gismo
                 case condition_type::laplace:
                 {
                     m_label = "Laplace";
+                    break;
+                }
+                case condition_type::strong_neumann:
+                {
+                    m_label = "Strong Neumann";
                     break;
                 }
                 default:
@@ -421,6 +438,9 @@ namespace gismo
         /// Return a reference to the Laplace sides
         const bcContainer & laplaceSides()     const {return m_bc["Laplace"]; }
 
+        /// Return a reference to the strong Neumann sides
+        const bcContainer & strongNeumannSides()     const {return m_bc["Strong Neumann"]; }
+
         const cornerContainer & cornerValues() const  {return corner_values;  }
 
         /// Extracts the BC, comming from a certain component.
@@ -584,6 +604,26 @@ namespace gismo
         iterator laplaceEnd()
         { return m_bc["Laplace"].end(); }
 
+        /// Get a const-iterator to the beginning of the Strong Neumann sides
+        /// \return an iterator to the beginning of the Strong Neumann sides
+        const_iterator strongNeumannBegin() const
+        { return m_bc["Strong Neumann"].begin(); }
+
+        /// Get a const-iterator to the end of the Strong Neumann sides
+        /// \return an iterator to the end of the Strong Neumann sides
+        const_iterator strongNeumannEnd() const
+        { return m_bc["Strong Neumann"].end(); }
+
+        /// Get an iterator to the beginning of the Strong Neumann sides
+        /// \return an iterator to the beginning of the Strong Neumann sides
+        iterator strongNeumannBegin()
+        { return m_bc["Strong Neumann"].begin(); }
+
+        /// Get an iterator to the end of the Strong Neumann sides
+        /// \return an iterator to the end of the Strong Neumann sides
+        iterator strongNeumannEnd()
+        { return m_bc["Strong Neumann"].end(); }
+
         void add(int p, boxSide s, const std::string & label,
                  const function_ptr & f_ptr, short_t unknown = 0,
                  int comp = -1, bool parametric = false)
@@ -734,6 +774,11 @@ namespace gismo
             cur = std::find_if(beg,end,psRef);
             if (cur != end)
                 return &(*cur);
+            beg = strongNeumannBegin();
+            end = strongNeumannEnd();
+            cur = std::find_if(beg,end,psRef);
+            if (cur != end)
+                return &(*cur);
 
             return NULL;
         }
@@ -772,6 +817,12 @@ namespace gismo
             for(cur=beg; cur!=end; cur++)
                 if(cur->ps == ps)
                     result.push_back(*cur);
+
+            beg = strongNeumannBegin();
+            end = strongNeumannEnd();
+            for(cur=beg; cur!=end; cur++)
+                if(cur->ps == ps)
+                    result.push_back(*cur);
         }
 
 
@@ -788,7 +839,8 @@ namespace gismo
             {
                 if((*it).patch()==np)
                 {
-                    if(it->type() == condition_type::dirichlet || it->type() == condition_type::neumann || it->type() == condition_type::robin || it->type() == condition_type::laplace)
+                    if(it->type() == condition_type::dirichlet || it->type() == condition_type::neumann ||
+                    it->type() == condition_type::robin || it->type() == condition_type::laplace)
                         result.addCondition(0,(*it).side(),(*it).type(),(*it).function(),(*it).unknown());
                     else
                         result.add(0,(*it).side(),it->ctype(),(*it).function(),(*it).unknown());

@@ -90,16 +90,17 @@ public:
             gsApproxGluingData<d, T> approxGluingData(auxPatchSingle, m_optionList, containingSides, isInterface);
 
             //Problem setup
-            std::vector<gsBSpline<T>> alpha;
-            std::vector<gsBSpline<T>> beta;
+            std::vector<gsBSpline<T>> alpha, beta;
+            std::vector<gsBSplineBasis<T>> basis_plus, basis_minus;
 
             std::vector<bool> kindOfEdge;
 
-            alpha.resize(2);
-            beta.resize(2);
+            alpha.resize(2); beta.resize(2); basis_plus.resize(2); basis_minus.resize(2);
 
             kindOfEdge.resize(2);
 
+            gsGeometry<T> & geo = auxPatchSingle[0].getPatchRotated();
+            gsMultiBasis<T> initSpace(auxPatchSingle[0].getBasisRotated().piece(9));
             for (size_t dir = 0; dir < containingSides.size(); ++dir)
             {
                 index_t localdir = auxPatchSingle[0].getMapIndex(containingSides[dir].index()) < 3 ? 1 : 0;
@@ -111,55 +112,59 @@ public:
                 }
 
                 kindOfEdge[localdir] = isInterface[dir];
+
+                gsBSplineBasis<T> b_plus, b_minus;
+                createPlusSpace(geo, initSpace.basis(0), dir, b_plus);
+                createMinusSpace(geo, initSpace.basis(0), dir, b_minus);
+
+                basis_plus[dir] = b_plus;
+                basis_minus[dir] = b_minus;
             }
-            gsGeometry<T> &geo = auxPatchSingle[0].getPatchRotated();
+
+            gsSparseSolver<real_t>::SimplicialLDLT solver;
+            gsExprAssembler<> A(1, 1);
+
+            // Elements used for numerical integration
+            gsMultiBasis<T> vertexSpace(auxPatchSingle[0].getBasisRotated().piece(m_vertexIndices[i] + 4));
+            A.setIntegrationElements(vertexSpace);
+            gsExprEvaluator<> ev(A);
+
+            // Set the discretization space
+            auto u = A.getSpace(vertexSpace);
+
+            // Create Mapper
+            gsDofMapper map(vertexSpace);
+            gsMatrix<index_t> act;
+            for (index_t dir = 0; dir < vertexSpace.basis(0).domainDim(); dir++)
+                for (index_t i = 3*vertexSpace.basis(0).degree(dir)+1; i < vertexSpace.basis(0).component(1-dir).size(); i++) // only the first two u/v-columns are Dofs (0/1)
+                {
+                    act = vertexSpace.basis(0).boundaryOffset(dir == 0 ? 3 : 1, i); // WEST
+                    map.markBoundary(0, act); // Patch 0
+                }
+            map.finalize();
+
+            gsBoundaryConditions<> bc_empty;
+            bc_empty.addCondition(1, condition_type::dirichlet, 0); // Doesn't matter which side
+            u.setup(bc_empty, dirichlet::homogeneous, 0, map);
+
+            A.initSystem();
+            A.assemble(u * u.tr());
+            solver.compute(A.matrix());
 
             // Create Basis functions
             gsMultiPatch<> result_1;
-            for (index_t bfID = 0; bfID < 6; bfID++) {
-                gsSparseSolver<real_t>::SimplicialLDLT solver;
-                gsExprAssembler<> A(1, 1);
+            for (index_t bfID = 0; bfID < 6; bfID++)
+            {
+                A.initVector();
 
-                typedef gsExprAssembler<>::variable variable;
-                typedef gsExprAssembler<>::space space;
-                typedef gsExprAssembler<>::solution solution;
-
-                // Elements used for numerical integration
-                gsMultiBasis<T> vertexSpace(auxPatchSingle[0].getBasisRotated().piece(m_vertexIndices[i] + 4));
-                A.setIntegrationElements(vertexSpace);
-                gsExprEvaluator<> ev(A);
-
-                // Set the discretization space
-                space u = A.getSpace(vertexSpace);
-
-                // Create Mapper
-                gsDofMapper map(vertexSpace);
-                gsMatrix<index_t> act;
-                for (index_t dir = 0; dir < vertexSpace.basis(0).domainDim(); dir++)
-                    for (index_t i = 3*vertexSpace.basis(0).degree(dir)+1; i < vertexSpace.basis(0).component(1-dir).size(); i++) // only the first two u/v-columns are Dofs (0/1)
-                    {
-                        act = vertexSpace.basis(0).boundaryOffset(dir == 0 ? 3 : 1, i); // WEST
-                        map.markBoundary(0, act); // Patch 0
-                    }
-                map.finalize();
-
-                gsBoundaryConditions<> bc_empty;
-                bc_empty.addCondition(1, condition_type::dirichlet, 0); // Doesn't matter which side
-                u.setup(bc_empty, dirichlet::homogeneous, 0, map);
-
-                A.initSystem();
-
-                gsMultiBasis<T> initSpace(auxPatchSingle[0].getBasisRotated().piece(9));
-                gsVertexBasis<real_t> vertexBasis(geo, initSpace.basis(0), alpha, beta, sigma, kindOfEdge, bfID);
+                gsVertexBasis<T> vertexBasis(geo, initSpace.basis(0), alpha, beta, basis_plus, basis_minus, sigma, kindOfEdge, bfID);
                 auto aa = A.getCoeff(vertexBasis);
+                A.assemble(u * aa);
 
-                A.assemble(u * u.tr(), u * aa);
+                gsMatrix<T> solVector = solver.solve(A.rhs());
 
-                solver.compute(A.matrix());
-                gsMatrix<> solVector = solver.solve(A.rhs());
-
-                solution u_sol = A.getSolution(u, solVector);
-                gsMatrix<> sol;
+                auto u_sol = A.getSolution(u, solVector);
+                gsMatrix<T> sol;
                 u_sol.extract(sol);
 
                 //gsDebugVar(sol - result_1.patch(bfID).coefs());

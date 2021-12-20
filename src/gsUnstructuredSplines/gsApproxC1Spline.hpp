@@ -106,18 +106,18 @@ void gsApproxC1Spline<d,T>::init()
 
         gsBSplineBasis<T> basis_plus;
         gsBSplineBasis<T> basis_minus;
-        createPlusSpace(basis_11, dir_1, basis_plus);
-        createMinusSpace(basis_11, dir_1, basis_minus);
+        createPlusSpace(m_patches.patch(item.first().patch), basis_11, dir_1, basis_plus);
+        createMinusSpace(m_patches.patch(item.first().patch), basis_11, dir_1, basis_minus);
         // [!Plus Minus space]
 
         gsBSplineBasis<T> basis_gluingData;
-        createGluingDataSpace(basis_11, dir_1, basis_gluingData);
+        createGluingDataSpace(m_patches.patch(item.first().patch), basis_11, dir_1, basis_gluingData);
         // [!Gluing data space]
 
         // [!Edge space]
         gsTensorBSplineBasis<d, T> basis_edge_11, basis_edge_22;
-        createEdgeSpace(basis_11, dir_1, basis_plus, basis_minus, basis_gluingData, basis_edge_11);
-        createEdgeSpace(basis_22, dir_2, basis_plus, basis_minus, basis_gluingData, basis_edge_22);
+        createEdgeSpace(m_patches.patch(item.first().patch), basis_11, dir_1, basis_plus, basis_minus, basis_gluingData, basis_edge_11);
+        createEdgeSpace(m_patches.patch(item.second().patch), basis_22, dir_2, basis_plus, basis_minus, basis_gluingData, basis_edge_22);
 
         // [!Edge space]
         m_bases[item.first().patch].setBasis(item.first().side().index(), basis_edge_11);
@@ -139,12 +139,12 @@ void gsApproxC1Spline<d,T>::init()
         // [!Plus Minus space]
         gsBSplineBasis<T> basis_plus;
         gsBSplineBasis<T> basis_minus;
-        createPlusSpace(basis, dir_1, basis_plus);
-        createMinusSpace(basis, dir_1, basis_minus);
+        createPlusSpace(m_patches.patch(bit.patch), basis, dir_1, basis_plus);
+        createMinusSpace(m_patches.patch(bit.patch), basis, dir_1, basis_minus);
         // [!Plus Minus space]
 
         gsTensorBSplineBasis<d, T> basis_edge_11;
-        createEdgeSpace(basis, dir_1, basis_plus, basis_minus, basis_edge_11);
+        createEdgeSpace(m_patches.patch(bit.patch), basis, dir_1, basis_plus, basis_minus, basis_edge_11);
 
         m_bases[bit.patch].setBasis(bit.side().index(), basis_edge_11);
 
@@ -171,13 +171,13 @@ void gsApproxC1Spline<d,T>::init()
             }
 
             gsTensorBSplineBasis<d, T> basis_vertex_11;
-            createVertexSpace(m_multiBasis.basis(allcornerLists[j].patch), isInterface_1, isInterface_2, basis_vertex_11);
+            createVertexSpace(m_patches.patch(allcornerLists[j].patch), m_multiBasis.basis(allcornerLists[j].patch),
+                              isInterface_1, isInterface_2, basis_vertex_11);
 
             m_bases[allcornerLists[j].patch].setBasis(allcornerLists[j].m_index + 4, basis_vertex_11);
         }
         row_dofs += 6;
     }
-
 
     // Initialise the matrix
     m_matrix.clear();
@@ -190,6 +190,26 @@ void gsApproxC1Spline<d,T>::init()
     m_matrix.resize(row_dofs, dim_col);
     const index_t nz = (m_multiBasis.basis(0).degree(0)*2 + 1)*row_dofs; // TODO
     m_matrix.reserve(nz);
+
+
+    if (m_options.getSwitch("info"))
+    {
+        for (size_t i = 0; i < m_bases.size(); i++)
+        {
+            gsInfo << "Patch " << i << ": \n";
+            for (index_t j = 0; j < m_bases[i].nPieces(); j++)
+            {
+                gsTensorBSplineBasis<d, T> basis = dynamic_cast<const gsTensorBSplineBasis<d, T>&>(m_bases[i].piece(j));
+                std::vector<index_t> vec_1 = basis.knots(0).multiplicities();
+                std::vector<index_t> vec_2 = basis.knots(1).multiplicities();
+                gsAsVector<index_t> mult_1(vec_1);
+                gsAsVector<index_t> mult_2(vec_2);
+                gsInfo << mult_1.transpose() << "\n";
+                gsInfo << mult_2.transpose() << "\n";
+                gsInfo << "----------------------------------\n";
+            }
+        }
+    }
 }   
 
 

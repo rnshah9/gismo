@@ -48,7 +48,7 @@ public:
             setGlobalGluingData(1,0); // u
             setGlobalGluingData(0,1); // v
         }
-        else if (m_auxPatches.size() == 1) // Vertex
+        else if (m_auxPatches.size() == 1 && sidesContainer.size() == 2) // Vertex
         {
             for (size_t dir = 0; dir < sidesContainer.size(); dir++)
             {
@@ -63,8 +63,8 @@ public:
                 }
             }
         }
-        else
-            gsInfo << "Something went wrong \n";
+        //else
+        //    gsInfo << "I am here \n";
 
     }
 
@@ -92,7 +92,7 @@ void gsApproxGluingData<d, T>::setGlobalGluingData(index_t patchID, index_t dir)
 {
     // ======== Space for gluing data : S^(p_tilde, r_tilde) _k ========
     gsBSplineBasis<T> bsp_gD;
-    createGluingDataSpace(m_auxPatches[patchID].getBasisRotated().piece(9), dir, bsp_gD);
+    createGluingDataSpace(m_auxPatches[patchID].getPatchRotated(), m_auxPatches[patchID].getBasisRotated().piece(9), dir, bsp_gD);
 
     //! [Problem setup]
     gsSparseSolver<real_t>::LU solver;
