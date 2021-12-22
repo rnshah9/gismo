@@ -290,8 +290,6 @@ public:
     /// CAREFUL: works only for 2D
     void getOVs(std::vector<std::vector<patchCorner> > & cornerLists) const;
 
-
-    std::vector<std::vector<patchCorner>> vertices() const;
 protected:
     // Data members
 

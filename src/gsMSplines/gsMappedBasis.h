@@ -56,24 +56,9 @@ public:
     gsMappedBasis() : m_mapper(nullptr)
     { }
 
-    gsMappedBasis(gsMultiPatch<T> const & mp, std::string pathToMap )
-    : m_mapper(nullptr)
-    {
-        gsMultiBasis<T> mb(mp);
-        gsSparseMatrix<T> m;
-        gsFileData<T>(pathToMap).getFirst(m);
-        init(mb,m);
-    }
+    gsMappedBasis(gsMultiPatch<T> const & mp, std::string pathToMap );
 
-    gsMappedBasis(gsMultiPatch<T> const & mp, const gsSparseMatrix<T> & m )
-    : m_mapper(nullptr)
-    {
-        gsMultiBasis<T> mb(mp);
-        init(mb,m);
-    }
-
-    gsMappedBasis(gsMultiBasis<T> const & mb, const gsSparseMatrix<T> & m)
-    : m_mapper(nullptr)
+    gsMappedBasis(gsMultiBasis<T> const & mb, const gsSparseMatrix<T> & m): m_mapper(nullptr)
     {
         init(mb,m);
     }
@@ -86,7 +71,6 @@ public:
     {
         GISMO_ASSERT(mb.domainDim()==d, "Error in dimensions");
         m_topol  = mb.topology();
-
         delete m_mapper;
         m_mapper = new gsWeightMapper<T>(m);
 
@@ -122,14 +106,6 @@ public:
 
      /// getter for m_bases
     const std::vector<BasisType*> getBases() const;
-
-     /// getter for m_bases
-    std::vector<BasisType*> getBasesCopy() const
-    {
-        std::vector<BasisType*> bases;
-        cloneAll(m_bases,bases);
-        return bases;
-    }
 
     /// getter for m_mapper
     gsWeightMapper<T> const & getMapper() const
@@ -186,7 +162,7 @@ public:
 
 private:
     /// helper function for boundary and innerBoundaries
-    void addLocalIndicesOfPatchSide(const patchSide& ps,unsigned offset,std::vector<index_t>& locals) const;
+    void addLocalIndizesOfPatchSide(const patchSide& ps,unsigned offset,std::vector<index_t>& locals) const;
 
 public:
     void reorderDofs(const gsPermutationMatrix& permMatrix)
@@ -242,9 +218,6 @@ public:
      * \param[in] localCoef : the coefficients to the local basis functions
      */
     gsMultiPatch<T> exportToPatches(gsMatrix<T> const & localCoef) const;
-
-    gsMatrix<T> support(index_t patch) const; //global BF active on patch at point
-    gsMatrix<T> support(const index_t patch, const index_t & i) const; //global BF active on patch at point
 
 public:
     //////////////////////////////////////////////////
@@ -380,20 +353,17 @@ protected:
 
     // Data members
 protected:
-    /// Topology, specifying the relation (connections) between the patches
+    /// topology, specifying the relation (connections) between the patches
     gsBoxTopology m_topol;
 
-    /// Vector of local bases
+    /// vector of patches (bases)
     std::vector<BasisType *> m_bases;
 
-    /// Map between the local basis functions and the newly created ones
+    /// map between the local basis functions and the newly created ones
     gsWeightMapper<T> * m_mapper;
     // gsSparseMatrix<T> r:C, c:B
 
-    /// Underlying bases per patch
     std::vector<gsMappedSingleBasis<d,T> > m_sb;
-
-    // Make gsMultiBasis a member instead of m_bases and m_topol?
 };
 
 }

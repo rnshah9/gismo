@@ -14,7 +14,6 @@
 #include <gsCore/gsGeometry.h>
 #include <gsCore/gsForwardDeclarations.h>
 #include <gsCore/gsExport.h>
-#include <gsMSplines/gsMappedSpline.h>
 
 #include <sstream>
 #include <fstream>
@@ -108,9 +107,9 @@ void gsWriteParaview(const gsMultiBasis<T> & mb, const gsMultiPatch<T> & domain,
 /// \param npts number of points used for sampling each curve
 /// \param mesh if true, the parameter mesh is plotted as well
 /// \param ctrNet if true, the control net is plotted as well
-//template<class T>
-//void gsWriteParaview( gsMappedSpline<2,T> const & Geo,
-//                      std::string const & fn, unsigned npts=NS, bool mesh = false, bool ctrNet = false );
+template<class T>
+void gsWriteParaview( gsCompositeGeom<2,T> const & Geo, 
+                      std::string const & fn, unsigned npts=NS, bool mesh = false, bool ctrNet = false );
 
 
 /// \brief Export i-th Basis function to paraview file
@@ -133,15 +132,6 @@ template<class T>
 void gsWriteParaview(const gsGeometrySlice<T> & Geo,
                      std::string const & fn, unsigned npts =NS);
 
-/// \brief Export a functionSet plot to paraview file
-///
-/// \param func a functionSet object
-/// \param fn filename where paraview file is written
-/// \param npts number of points used for sampling the domain
-template<class T>
-void gsWriteParaview(gsFunctionSet<T> const& func,
-                     std::string const & fn,
-                     unsigned npts =NS);
 
 /// \brief Export a function plot to paraview file
 ///

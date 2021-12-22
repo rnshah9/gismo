@@ -274,11 +274,11 @@ public:
     void setFixedDofs(const gsMatrix<T> & coefMatrix, short_t unk = 0, size_t patch = 0);
 
     /// \brief Initializes the sparse system (sparse matrix and rhs)
-    void initSystem(const index_t numRhs = 1)
+    void initSystem()
     {
         // Check spaces.nPatches==mesh.patches
         initMatrix();
-        m_rhs.setZero(numTestDofs(), numRhs);
+        m_rhs.setZero(numDofs(), 1);
     }
 
     /// \brief Initializes the sparse matrix only
@@ -308,7 +308,7 @@ public:
     void initVector(const index_t numRhs = 1)
     {
         resetDimensions();
-        m_rhs.setZero(numTestDofs(), numRhs);
+        m_rhs.setZero(numDofs(), numRhs);
     }
 
     /// Returns a block view of the system matrix, each block
@@ -473,7 +473,6 @@ private:
                 GISMO_ASSERT( colMap.boundarySize()==fixedDofs.size(),
                               "Invalid values for fixed part");
             }
-
             for (index_t r = 0; r != rd; ++r)
             {
                 const index_t rls = r * rowInd0.rows();     //local stride
@@ -514,9 +513,8 @@ private:
                         }
                         else
                         {
-                            //The right-hand side can have more than one columns
-#                           pragma omp critical (acc_m_rhs)
-                            m_rhs.row(ii) += localMat.row(rls+i);
+#                           pragma omp atomic
+                            m_rhs.at(ii) += localMat.at(rls+i);
                         }
                     }
                 }
