@@ -100,16 +100,32 @@ void gsApproxC1Spline<d,T>::init()
         const index_t dir_1 = item.first().side().index() > 2 ? 0 : 1;
         const index_t dir_2 = item.second().side().index() > 2 ? 0 : 1;
 
+        // [!Basis space]
         gsTensorBSplineBasis<d, T> basis_11 = dynamic_cast<gsTensorBSplineBasis<d, T> &>(m_multiBasis.basis(item.first().patch));
         gsTensorBSplineBasis<d, T> basis_22 = dynamic_cast<gsTensorBSplineBasis<d, T> &>(m_multiBasis.basis(item.second().patch));
+/*
+        gsTensorBSplineBasis<d, T> basis;
+        index_t dir;
+        if (basis_11.component(dir_1).numElements() > basis_22.component(dir_2).numElements())
+        {
+            basis = basis_22;
+            dir = dir_2;
+        }
+        else
+        {
+            basis = basis_11;
+            dir = dir_1;
+        }
+        // [!Basis space]
+*/
         // [!Plus Minus space]
-
         gsBSplineBasis<T> basis_plus;
         gsBSplineBasis<T> basis_minus;
         createPlusSpace(m_patches.patch(item.first().patch), basis_11, dir_1, basis_plus);
         createMinusSpace(m_patches.patch(item.first().patch), basis_11, dir_1, basis_minus);
         // [!Plus Minus space]
 
+        // [!Gluing data space]
         gsBSplineBasis<T> basis_gluingData;
         createGluingDataSpace(m_patches.patch(item.first().patch), basis_11, dir_1, basis_gluingData);
         // [!Gluing data space]
@@ -199,6 +215,7 @@ void gsApproxC1Spline<d,T>::init()
             gsInfo << "Patch " << i << ": \n";
             for (index_t j = 0; j < m_bases[i].nPieces(); j++)
             {
+                gsInfo << (j == 0 ? "Interior Space: " : ( j < 5 ? "Edge Space: " : "Vertex Space: ") ) << "\n";
                 gsTensorBSplineBasis<d, T> basis = dynamic_cast<const gsTensorBSplineBasis<d, T>&>(m_bases[i].piece(j));
                 std::vector<index_t> vec_1 = basis.knots(0).multiplicities();
                 std::vector<index_t> vec_2 = basis.knots(1).multiplicities();

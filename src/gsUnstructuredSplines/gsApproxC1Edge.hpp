@@ -26,7 +26,34 @@ namespace gismo
 
         // Compute GLuing data
         gsApproxGluingData<d, T> approxGluingData(m_auxPatches, m_optionList, sidesContainer);
+/*
+        gsMultiBasis<T> basis;
+        index_t dir;
+        if (sidesContainer.size() == 2)
+        {
+            gsMultiBasis<T> basis_11(m_auxPatches[0].getBasisRotated().piece(9));
+            gsMultiBasis<T> basis_22(m_auxPatches[1].getBasisRotated().piece(9));
+            index_t dir_1 = 1;
+            index_t dir_2 = 0;
 
+            if (basis_11.basis(0).component(dir_1).numElements() > basis_22.basis(0).component(dir_2).numElements())
+            {
+                basis = basis_22;
+                dir = dir_2;
+            }
+            else
+            {
+                basis = basis_11;
+                dir = dir_1;
+            }
+        }
+        else
+        {
+            gsMultiBasis<T> basis_11(m_auxPatches[0].getBasisRotated().piece(9));
+            basis = basis_11;
+            dir = 1;
+        }
+*/
         //! [Problem setup]
         basisEdgeResult.clear();
         for (size_t patchID = 0; patchID < sidesContainer.size(); patchID++) {
@@ -37,8 +64,8 @@ namespace gismo
             gsBSplineBasis<T> basis_plus, basis_minus;
 
             gsMultiBasis<T> initSpace(m_auxPatches[patchID].getBasisRotated().piece(9));
-            createPlusSpace(m_auxPatches[patchID].getPatchRotated(), initSpace.basis(0), dir, basis_plus);
-            createMinusSpace(m_auxPatches[patchID].getPatchRotated(), initSpace.basis(0), dir, basis_minus);
+            createPlusSpace(m_auxPatches[0].getPatchRotated(), initSpace.basis(0), dir, basis_plus);
+            createMinusSpace(m_auxPatches[0].getPatchRotated(), initSpace.basis(0), dir, basis_minus);
 
             gsGeometry<T> &geo = m_auxPatches[patchID].getPatchRotated();
 

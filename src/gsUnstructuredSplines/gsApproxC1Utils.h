@@ -19,18 +19,19 @@ namespace gismo
 {
 
 void createGluingDataSpace(const gsGeometry<real_t> & patch, const gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & result);
+
 void createPlusSpace(const gsGeometry<real_t> & patch, gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & res_plus);
+
 void createMinusSpace(const gsGeometry<real_t> & patch, gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & res_minus);
+
 void createEdgeSpace(const gsGeometry<real_t> & patch, gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & basis_plus,
-                     gsBSplineBasis<real_t> & basis_minus, gsBSplineBasis<real_t> & basis_gD,
-                     gsTensorBSplineBasis<2, real_t> & result);
+                     gsBSplineBasis<real_t> & basis_minus, gsBSplineBasis<real_t> & basis_gD, gsTensorBSplineBasis<2, real_t> & result);
+
 void createEdgeSpace(const gsGeometry<real_t> & patch, gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & basis_plus,
                      gsBSplineBasis<real_t> & basis_minus, gsTensorBSplineBasis<2, real_t> & result);
+
 void createVertexSpace(const gsGeometry<real_t> & patch, gsBasis<real_t> & basis, bool isInterface_1, bool isInterface_2,
                        gsTensorBSplineBasis<2, real_t> & result);
-
-void reduceContinuityPreserveGeo(gsKnotVector<real_t> & basis_knots, gsKnotVector<real_t> & geo_knots,
-                                 index_t mult_basis_reduce = 1, index_t mult_geo_reduce = 0);
 
 // Input is parametric coordinates of 1-D \a mp
 template <class T>

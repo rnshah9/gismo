@@ -287,11 +287,12 @@ int main(int argc, char *argv[])
         //A.assembleRhsBc(ilapl(u, G) * (igrad(u_ex) * nv(G)).tr(), bc.neumannSides() );
 
         real_t penalty  = 4 * ( dbasis.maxCwiseDegree() + dbasis.dim() ) * ( dbasis.maxCwiseDegree() + 1 );
-        real_t m_h      = dbasis.basis(0).getMinCellLength()*dbasis.basis(0).getMinCellLength();
+        real_t m_h      = dbasis.basis(0).getMinCellLength(); //*dbasis.basis(0).getMinCellLength();
         real_t mu       = 2 * penalty / m_h;
 
         if (nitsche)
         {
+            gsInfo << "mu: " << mu << "\n";
             /*
             A.assembleIfc(mp.interfaces(), - 0.5 * ((igrad(u.left(), G.left()) - igrad(u.right(), G.right())) * nv(G)) *
                     (ilapl(u.left(), G.left()) + ilapl(u.right(), G.right()))
@@ -315,13 +316,13 @@ int main(int argc, char *argv[])
 
             A.assembleIfc(mp.interfaces(),
                      //B11
-                     alpha*0.5*igrad( u.left() , G) * nv(G).normalized() * (ilapl(u.left(), G.left())).tr()  * meas(G),
+                     -alpha*0.5*igrad( u.left() , G.left()) * nv(G).normalized() * (ilapl(u.left(), G.left())).tr()  * meas(G),
                      //B12
-                    -alpha*0.5*igrad(u.left()  , G) * nv(G).normalized() * (ilapl(u.right(), G.right())).tr() * meas(G),
+                     -alpha*0.5*igrad( u.left()  , G.left()) * nv(G).normalized() * (ilapl(u.right(), G.right())).tr() * meas(G),
                      //B21
-                     alpha*0.5*igrad( u.right(), G) * nv(G).normalized() * (ilapl(u.left(), G.left())).tr() * meas(G),
+                     alpha*0.5*igrad( u.right(), G.right()) * nv(G).normalized() * (ilapl(u.left(), G.left())).tr() * meas(G),
                      //B22
-                    -alpha*0.5*igrad(u.right() , G) * nv(G).normalized() * (ilapl(u.right(), G.right())).tr() * meas(G),
+                     alpha*0.5*igrad( u.right() , G.right()) * nv(G).normalized() * (ilapl(u.right(), G.right())).tr() * meas(G),
 /*
                      // symmetry
                      beta *0.5*igrad( u_dg.right(), G) * nv(G).normalized() * u_dg.right().tr() * meas(G),
@@ -330,13 +331,13 @@ int main(int argc, char *argv[])
                      -beta *0.5*igrad(u_dg.left() , G) * nv(G).normalized() * u_dg.left() .tr() * meas(G),
 */
                      // E11
-                      mu * igrad(u.left(), G) * nv(G).normalized() * (igrad(u.left(), G) * nv(G).normalized()).tr() * meas(G),
+                      mu * igrad(u.left(), G.left()) * nv(G).normalized() * (igrad(u.left(), G.left()) * nv(G).normalized()).tr() * meas(G),
                      //-E12
-                     -mu * (igrad(u.left(), G) * nv(G).normalized()) * u.right().tr() * meas(G),
+                      -mu * (igrad(u.left(), G.left()) * nv(G).normalized()) * (igrad(u.right(), G.right()) * nv(G).normalized()).tr() * meas(G),
                      //-E21
-                     -mu * (igrad(u.right(), G) * nv(G).normalized()) * (igrad(u.left(), G) * nv(G).normalized()).tr() * meas(G),
+                      -mu * (igrad(u.right(), G.right()) * nv(G).normalized()) * (igrad(u.left(), G.left()) * nv(G).normalized()).tr() * meas(G),
                      // E22
-                      mu * igrad(u.right(), G) * nv(G).normalized() * (igrad(u.right(), G) * nv(G).normalized()).tr() * meas(G)
+                      mu * igrad(u.right(), G.right()) * nv(G).normalized() * (igrad(u.right(), G.right()) * nv(G).normalized()).tr() * meas(G)
                 );
         }
 
