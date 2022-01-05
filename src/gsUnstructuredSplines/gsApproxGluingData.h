@@ -90,6 +90,10 @@ protected:
 template<short_t d, class T>
 void gsApproxGluingData<d, T>::setGlobalGluingData(index_t patchID, index_t dir)
 {
+    // Interpolate boundary yes or no //
+    bool interpolate_boundary = false;
+    // Interpolate boundary yes or no //
+
     // ======== Space for gluing data : S^(p_tilde, r_tilde) _k ========
     gsBSplineBasis<T> bsp_gD;
     createGluingDataSpace(m_auxPatches[patchID].getPatchRotated(), m_auxPatches[patchID].getBasisRotated().piece(9), dir, bsp_gD);
@@ -107,15 +111,32 @@ void gsApproxGluingData<d, T>::setGlobalGluingData(index_t patchID, index_t dir)
     A.setIntegrationElements(BsplineSpace);
     gsExprEvaluator<> ev(A);
 
+    gsAlpha<real_t> alpha(m_auxPatches[patchID].getPatchRotated(), dir);
+    auto aa = A.getCoeff(alpha);
+
     // Set the discretization space
     space u = A.getSpace(BsplineSpace);
 
-    gsBoundaryConditions<> bc_empty;
-    u.setup(bc_empty, dirichlet::homogeneous, 0);
-    A.initSystem();
+    // Create Mapper
+    gsDofMapper map(BsplineSpace);
+    gsMatrix<index_t> act(2,1);
+    act(0,0) = 0;
+    act(1,0) = BsplineSpace[0].size()-1; // First and last
+    if (interpolate_boundary)
+        map.markBoundary(0, act); // Patch 0
+    map.finalize();
 
-    gsAlpha<real_t> alpha(m_auxPatches[patchID].getPatchRotated(), dir);
-    auto aa = A.getCoeff(alpha);
+    gsBoundaryConditions<> bc_empty;
+    u.setup(bc_empty, dirichlet::user, -1, map);
+
+    // For the boundary
+    gsMatrix<> points_bdy(1,2);
+    points_bdy << 0.0, 1.0;
+    gsMatrix<real_t> & fixedDofs = const_cast<expr::gsFeSpace<real_t>& >(u).fixedPart();
+    if (interpolate_boundary)
+        fixedDofs = alpha.eval(points_bdy).transpose();
+
+    A.initSystem();
 
     A.assemble(u * u.tr(),u * aa);
 
@@ -132,6 +153,11 @@ void gsApproxGluingData<d, T>::setGlobalGluingData(index_t patchID, index_t dir)
 
     gsBeta<real_t> beta(m_auxPatches[patchID].getPatchRotated(), dir);
     auto bb = A.getCoeff(beta);
+
+    // For the boundary
+    if (interpolate_boundary)
+        fixedDofs = beta.eval(points_bdy).transpose();
+
     A.initSystem();
 
     A.assemble(u * u.tr(),u * bb);
@@ -144,6 +170,9 @@ void gsApproxGluingData<d, T>::setGlobalGluingData(index_t patchID, index_t dir)
 
     tilde_temp = bsp_gD.makeGeometry(sol);
     betaSContainer[dir] = dynamic_cast<gsBSpline<T> &> (*tilde_temp);
+
+    if (dir == 0)
+        gsWriteParaview(alphaSContainer[0],"alpha",200);
 
 } // setGlobalGluingData
 
