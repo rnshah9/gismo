@@ -1,13 +1,9 @@
 #/** @file gsMappedSpline_example.cpp
-
     @brief Example using the gsMappedBasis and gsMappedSpline class
-
     This file is part of the G+Smo library.
-
     This Source Code Form is subject to the terms of the Mozilla Public
     License, v. 2.0. If a copy of the MPL was not distributed with this
     file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
     Author(s): A. Mantzaflaris, P. Weinmueller, H. Verhelst
 */
 
@@ -16,57 +12,6 @@
 
 using namespace gismo;
 //! [Include namespace]
-
-
-template <class T>
-class gsSingleBasis : public gismo::gsFunction<T>
-{
-
-protected:
-    gsBasis<T> & _basis;
-    mutable gsMapData<T> _tmp;
-    index_t m_bfID;
-
-
-public:
-    /// Shared pointer for gsSingleBasis
-    typedef memory::shared_ptr< gsSingleBasis > Ptr;
-
-    /// Unique pointer for gsSingleBasis
-    typedef memory::unique_ptr< gsSingleBasis > uPtr;
-
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
-    gsSingleBasis(gsBasis<T> & basis, index_t bfID) :
-            _basis(basis), m_bfID(bfID), _basis_piece(nullptr)
-    {
-        _tmp.flags = NEED_JACOBIAN;
-    }
-
-    ~gsSingleBasis() { delete _basis_piece; }
-
-GISMO_CLONE_FUNCTION(gsSingleBasis)
-
-    short_t domainDim() const {return 2;}
-
-    short_t targetDim() const {return 1;}
-
-    mutable gsSingleBasis<T> * _basis_piece; // why do we need this?
-
-    const gsFunction<T> & piece(const index_t k) const
-    {
-        //delete _basis_piece;
-        _basis_piece = new gsSingleBasis(_basis, m_bfID);
-        return *_basis_piece;
-    }
-
-    // Input is parametric coordinates of 1-D \a mp
-    void eval_into(const gsMatrix<T>& u, gsMatrix<T>& result) const
-    {
-        result.resize( targetDim() , u.cols() );
-        result = _basis.evalSingle(m_bfID, u);
-    }
-};
 
 
 void createSplineBasisL2Projection(gsMultiBasis<> & mb_level1, gsMultiBasis<> & mb_level2, gsSparseMatrix<> & cf)
@@ -82,8 +27,9 @@ void createSplineBasisL2Projection(gsMultiBasis<> & mb_level1, gsMultiBasis<> & 
     gsMatrix<> mat_lvl1, mat_lvl2;
     mat_lvl1.setZero(mb_level1.basis(0).size(),mb_level2.basis(0).size());
     //mat_lvl2.setIdentity(mb_level2.basis(0).size(),mb_level2.basis(0).size());
-    for (index_t bfID = 0; bfID < mb_level1.basis(0).size(); bfID ++) {
-        gsSingleBasis<real_t> sb(mb_level1.basis(0), bfID);
+    for (index_t bfID = 0; bfID < mb_level1.basis(0).size(); bfID ++)
+    {
+        auto sb = mb_level1.basis(0).function(bfID);
         auto aa = A.getCoeff(sb);
 
         gsBoundaryConditions<> bc_empty;
@@ -132,60 +78,45 @@ int main(int argc, char *argv[])
 
     gsCmdLine cmd("Example using mapped spline.");
     cmd.addInt("c", "choice", "Which example/case/choice do you want to run?", choice);
-#/** EXAMPLE 0: Create a mapped spline from the geometry "-c 0" (default options)
-
+/** EXAMPLE 0: Create a mapped spline from the geometry "-c 0" (default options)
 The example run with the (given) geometry and create a multi-basis from the geometry.
 Then the coeficient matrix is constructed with the identity matrix.
-
 User options:
     -f  <string>    The filepath of the geometry.
                     If it is empty, the geometry will be a unit interval/square/cube. To choose which one, call "-D":
     -D  <int>       Define the dimension of the geometry domain: Interval(1), Square(2), Cube(3)
-
     -p  <int>       Discrete polynomial degree. The basis functions will set to degree "p"
     -r  <int>       Discrete regularity. The basis functions will set to regularity "r"
     -l  <int>       Discrete refinement. The basis functions will be uniformed refined "l"-times
-
     --xml           If you want to save the basis functions in a XML file.
     --plot          Create a ParaView visualization file with the mapped basis
 **/
 
-#/** EXAMPLE 1: Read a mapped spline from the xml file "-c 1"
-
+/** EXAMPLE 1: Read a mapped spline from the xml file "-c 1"
 The example read the basis function, coefficient sparse matrix and coordinates from the xml file. Use the flag "--plot"
 to visualize the basis functions and the resulting geometry.
-
 User options:
     -f  <string>    The filepath of the xml file.
-
     --plot          Create a ParaView visualization file with the mapped basis
 **/
 
-#/** EXAMPLE 2: Create the old basis functions as linear combination of the new basis "-c 2"
-
+/** EXAMPLE 2: Create the old basis functions as linear combination of the new basis "-c 2"
 The example run with the (given) geometry and create a multi-basis from the geometry. We call the "old" space of that
 basis functions as V(p,r,l). Then we set up the new space W(P,R,L) and do an L2-projection to obtain
 the linear combination to represent the basis functions from V(p,r,l) with the basis of W(P,R,L), e.g.
-
 v_j = \sum_i a_{i,j} w_i
-
 which gives us the coeficient matrix.
-
 Note: the transformation makes only sense iff V \subset W
-
 User options:
     -f  <string>    The filepath of the geometry.
                     If it is empty, the geometry will be a unit interval/square/cube. To choose which one, call "-D":
     -D  <int>       Define the dimension of the geometry domain: Interval(1), Square(2), Cube(3)
-
     -p  <int>       Discrete polynomial degree. The basis functions will set to degree "p"
     -r  <int>       Discrete regularity. The basis functions will set to regularity "r"
     -l  <int>       Discrete refinement. The basis functions will be uniformed refined "l"-times
-
     -P  <int>       Discrete polynomial degree for space 2. The basis functions will set to degree "P"
     -R  <int>       Discrete regularity for space 2. The basis functions will set to regularity "R"
     -L  <int>       Discrete refinement for space 2. The basis functions will be uniformed refined "L"-times
-
     --xml           If you want to save the new basis functions in a XML file.
     --plot          Create a ParaView visualization file with the mapped basis
 **/
@@ -206,7 +137,7 @@ User options:
 
     cmd.addSwitch("plot", "Create a ParaView visualization file with the solution", plot);
     cmd.addSwitch("xml", "Save the XML file with the (special) basis functions", xml);
-    cmd.getValues(argc,argv);
+    try { cmd.getValues(argc,argv); } catch (int rv) { return rv; }
     //! [Parse command line]
 
     //! [Initialization]
@@ -247,7 +178,7 @@ User options:
             for (index_t i = 0; i < numRefine; i++)
                 mb.uniformRefine(1, discreteDegree - discreteRegularity);
 
-            // Set Trafo Matrix to identity for the mappedBasis
+            // Set Transformation Matrix to identity for the mappedBasis
             cf.resize(mb.size(), mb.size());
             cf.setIdentity();
 
@@ -336,7 +267,6 @@ User options:
     result_mspline = mbasis.basis(0).eval(points);
     result_mspline = mbasis.basis(0).deriv(points);
     result_mspline = mbasis.basis(0).deriv2(points);
-
     index_t bfID = 0;
     result_mspline = mbasis.basis(0).evalSingle(bfID, points);
  */
