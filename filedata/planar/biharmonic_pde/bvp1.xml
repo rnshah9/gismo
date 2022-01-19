@@ -51,8 +51,8 @@
 <!-- Assembler options -->
 <OptionList id="100">
   <int label="numRefine" desc="Number of Uniform h-refinement loops" value="3"/>
-  <int label="discreteDegree" desc="Number of degree elevation steps to perform before solving (Degree 3 == 0)" value="0"/>
-  <int label="discreteRegularity" desc="Number of degree elevation steps to perform before solving (Degree 3 == 0)" value="0"/>
+  <int label="discreteDegree" desc="Number of degree elevation steps to perform before solving (Degree 3 == 0)" value="3"/>
+  <int label="discreteRegularity" desc="Number of degree elevation steps to perform before solving (Degree 3 == 0)" value="2"/>
   <int label="geometry" desc="Which geometry" value="1000"/>
   <bool label="plot" desc="Plot the solution" value="0"/>
  </OptionList>

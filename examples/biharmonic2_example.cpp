@@ -97,6 +97,7 @@ int main(int argc, char *argv[])
     bool info = false;
     bool neumann = false;
     bool nitsche = false;
+    bool xml = false;
     std::string fn;
 
     index_t geometry = 1000;
@@ -115,6 +116,7 @@ int main(int argc, char *argv[])
     cmd.addSwitch("neumann", "Neumann", neumann);
     cmd.addSwitch("nitsche", "Nitsche", nitsche);
 
+    cmd.addSwitch("xml", "Read the option list from the xml file.", xml);
     try { cmd.getValues(argc,argv); } catch (int rv) { return rv; }
     //! [Parse command line]
 
@@ -171,6 +173,11 @@ int main(int argc, char *argv[])
     gsOptionList optionList;
     fd.getId(100, optionList); // id=100: assembler options
     gsInfo << "OptionList: " << optionList << "\n";
+    if (xml)
+    {
+        discreteDegree = optionList.getInt("discreteDegree");
+        // [...]
+    }
     //! [Read input file]
 
     //! [Refinement]
