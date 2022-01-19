@@ -104,12 +104,18 @@ template<class T> class gsExprHelper;
 namespace expr
 {
 
+template <class E> struct is_arithmetic{enum{value=0};};
+template <> struct is_arithmetic<real_t>{enum{value=1};};
+template <typename E, bool = is_arithmetic<E>::value >
+class _expr {using E::GISMO_ERROR_expr;};
+
 template<class T> class gsFeSpace;
 template<class T> class gsFeVariable;
 template<class T> class gsFeSolution;
 template<class E> class symm_expr;
 template<class E> class symmetrize_expr;
 template<class E> class trace_expr;
+template<class E> class integral_expr;
 template<class E> class adjugate_expr;
 template<class E> class norm_expr;
 template<class E> class sqNorm_expr;
@@ -123,11 +129,17 @@ template<class T> class meas_expr;
 template<class E> class inv_expr;
 template<class E> class tr_expr;
 template<class E> class cb_expr;
+template<class E> class abs_expr;
+template<class E> class pow_expr;
 template<class E> class sign_expr;
 template<class T> class cdiam_expr;
 template<class E> class temp_expr;
 template<class E1, class E2, bool = E1::ColBlocks> class mult_expr
 {using E1::GISMO_ERROR_mult_expr_has_invalid_template_arguments;};
+
+// Call as pow(a,b)
+template<class E> pow_expr<E>
+pow(_expr<E> const& u, real_t q) { return pow_expr<E>(u,q); }
 
 /*
   Traits class for expressions
@@ -140,8 +152,8 @@ public:
     typedef const E Nested_t;
 };
 
-#  define Temporary_t typename util::conditional<ScalarValued,Scalar,\
-          typename gsMatrix<Scalar>::Base >::type
+#  define Temporary_t typename util::conditional<ScalarValued,Scalar,   \
+        typename gsMatrix<Scalar>::Base >::type
 #if __cplusplus >= 201402L || _MSVC_LANG >= 201402L // c++14
 #  define MatExprType  auto
 #  define AutoReturn_t auto
@@ -150,12 +162,6 @@ public:
 #  define MatExprType typename gsMatrix<real_t>::constRef
 #  define AutoReturn_t typename util::conditional<ScalarValued,real_t,MatExprType>::type
 #endif
-
-template <class E> struct is_arithmetic{enum{value=0};};
-template <> struct is_arithmetic<real_t>{enum{value=1};};
-
-template <typename E, bool = is_arithmetic<E>::value >
-class _expr {using E::GISMO_ERROR_expr;};
 
 /**
    \brief Base class for all expressions
@@ -202,10 +208,10 @@ public:
 
     std::ostream & printDetail(std::ostream &os) const
     {
-        os << (isScalar() ? "Scalar " :
+        os << (isVectorTr() ? "VectorTr " :
                (isVector() ? "Vector " :
                 (isMatrix() ? "Matrix " :
-                 "Unknown ") ) )
+                 "Scalar ") ) )
            <<"expression of size "<< rows() // bug: this might be invalid if unparsed
            << " x "<<cols()<<"\n";
         print(os);
@@ -353,7 +359,7 @@ public:
 
     operator const gsFeSpace<T> & () const
     {
-        static gsFeSpace<T> vv;
+        static gsFeSpace<T> vv(-1);
         return vv;
     }
 
@@ -431,6 +437,7 @@ public:
 
     index_t cardinality_impl() const
     {
+        GISMO_ASSERT(this->data().actives.rows()!=0,"Cardinality depends on the NEED_ACTIVE flag");
         return m_d * this->data().actives.rows();
     }
 
@@ -439,7 +446,7 @@ public:
 
 private:
     void setData(const gsFuncData<Scalar> & val) { m_fd = &val;}
-    void setDim(index_t _d) { m_d = give(_d); }
+    void setDim(index_t _d) { m_d = _d; }
     void clear() { m_fs = NULL; }
 
 protected:
@@ -492,7 +499,7 @@ public:
 };
 
 /*
-   Column expression
+  Column expression
 */
 template<class E>
 class col_expr : public _expr<col_expr<E> >
@@ -533,7 +540,7 @@ public:
     typedef T Scalar;
     typedef const _expr<T> Nested_t;
 
-    _expr(const Scalar & c) : _c(c) { }
+    _expr(Scalar c) : _c(give(c)) { }
 
 public:
     enum {Space = 0, ScalarValued = 1, ColBlocks= 0};
@@ -635,6 +642,41 @@ template <typename T>  struct expr_traits<gsGeometryMap<T> >
 };
 
 /*
+  Expression for the measure of a geometry map
+*/
+template<class T>
+class meas_expr : public _expr<meas_expr<T> >
+{
+    typename gsGeometryMap<T>::Nested_t _G;
+
+public:
+    enum {Space = 0, ScalarValued = 1, ColBlocks = 0};
+
+    typedef T Scalar;
+
+    meas_expr(const gsGeometryMap<T> & G) : _G(G) { }
+
+    T eval(const index_t k) const
+    {
+        return _G.data().measures.at(k);
+    }
+
+    index_t rows() const { return 0; }
+    index_t cols() const { return 0; }
+    void parse(gsExprHelper<Scalar> & evList) const
+    {
+        evList.add(_G);
+        _G.data().flags |= NEED_MEASURE;
+    }
+
+    const gsFeSpace<T> & rowVar() const { return gsNullExpr<T>::get(); }
+    const gsFeSpace<T> & colVar() const { return gsNullExpr<T>::get(); }
+
+    void print(std::ostream &os) const { os << "meas("; _G.print(os); os <<")"; }
+};
+
+
+/*
   An element object collecting relevant expressions
 */
 template<class T>
@@ -644,52 +686,95 @@ class gsFeElement
 
     const gsDomainIterator<T> * m_di; ///< Pointer to the domain iterator
 
-    cdiam_expr<T> cd;
+    const gsVector<T> * m_weights;
+    //const gsMatrix<T> * m_points;
+
+    gsFeElement(const gsFeElement &);
 public:
     typedef T Scalar;
 
-    gsFeElement() : m_di(NULL), cd(*this) { }
+    gsFeElement() : m_di(NULL), m_weights(nullptr) { }
 
-    void set(const gsDomainIterator<T> & di)
-    { m_di = &di; }
+    void set(const gsDomainIterator<T> & di, const gsVector<T> & weights)
+    { m_di = &di, m_weights = &weights; }
 
-    /// The diameter of the element
-    const cdiam_expr<T> & diam() const
-    {
-        return cd;
-        //return cdiam_expr<T>(*this);
-        // return cdiam_expr<T>(m_di); // bug ..
-    }
+    bool isValid() const { return nullptr!=m_weights; }
 
+    const gsVector<T> & weights() const {return *m_weights;}
+    
+    template<class E>
+    integral_expr<E> integral(const _expr<E>& ff) const
+    { return integral_expr<E>(*this,ff); }
+
+    typedef pow_expr<integral_expr<T> > DiamRetType;
+    /// The diameter of the element (on parameter space)
+    DiamRetType diam() const //-> int(1)^(1/d)
+    { return pow(integral(_expr<T,true>(1)),(T)(1)/2); }
+
+    typedef pow_expr<integral_expr<meas_expr<T> > > PHDiamRetType;
+    /// The diameter of the element on the physical space
+    PHDiamRetType diam(const gsGeometryMap<Scalar> & _G) const
+    { return pow(integral(meas_expr<T>(_G)),(T)(1)/2); }
+
+    //const gsMatrix<T> points() const {return pts;}
+
+    //index_t dim() { return di->
+        
     void print(std::ostream &os) const { os << "e"; }
+
+    void parse(gsExprHelper<T> & evList) const
+    {
+        GISMO_ERROR("EL");
+        evList.add(*this);
+        this->data().flags |= NEED_VALUE;
+    }
 };
 
 /**
    An expression of the element diameter
 */
-template<class T>
-class cdiam_expr : public _expr<cdiam_expr<T> >
+template<class E>
+class integral_expr : public _expr<integral_expr<E> >
 {
-    const gsFeElement<T> & _e; ///<Reference to the element
 public:
-    typedef T Scalar;
-
+    //typedef typename E::Scalar Scalar;
+    typedef real_t Scalar;
+    mutable Scalar m_val;
+private:
+    const gsFeElement<Scalar> & _e; ///<Reference to the element
+    typename _expr<E>::Nested_t _ff;
+public:
     enum {Space= 0, ScalarValued= 1, ColBlocks = 0};
 
-    explicit cdiam_expr(const gsFeElement<T> & el) : _e(el) { }
+    integral_expr(const gsFeElement<Scalar> & el, const _expr<E> & u)
+    : _e(el), _ff(u) { }
 
-    T eval(const index_t ) const { return _e.m_di->getCellSize(); }
+    const Scalar & eval(const index_t k) const
+    {
+        GISMO_ENSURE(_e.isValid(), "Element is valid within integrals only.");
+        if (0==k)
+        {
+            const Scalar * w = _e.weights().data();
+            m_val = (*w) * _ff.val().eval(0);
+            for (index_t k = 1; k != _e.weights().rows(); ++k)
+                m_val += (*(++w)) * _ff.val().eval(k);
+        }
+        return m_val;
+    }
 
-    inline cdiam_expr<T> val() const { return *this; }
+    inline integral_expr<E> val() const { return *this; }
     inline index_t rows() const { return 0; }
     inline index_t cols() const { return 0; }
-    void parse(gsExprHelper<Scalar> & ) const { }
+    void parse(gsExprHelper<Scalar> & evList) const
+    {
+        _ff.parse(evList);
+    }
 
-    const gsFeSpace<T> & rowVar() const { return gsNullExpr<T>(); }
-    const gsFeSpace<T> & colVar() const { return gsNullExpr<T>(); }
+    const gsFeSpace<Scalar> & rowVar() const { return gsNullExpr<Scalar>::get(); }
+    const gsFeSpace<Scalar> & colVar() const { return gsNullExpr<Scalar>::get(); }
 
     void print(std::ostream &os) const
-    { os << "diam(e)"; }
+    { os << "integral(.)"; }
 };
 
 /*
@@ -710,8 +795,8 @@ public:
   inline index_t rows() const { return 0; }
   inline index_t cols() const { return 0; }
   void parse(gsExprHelper<Scalar> &) const { }
-  const gsFeVariable<T> & rowVar() const { gsNullExpr<T>(); }
-  const gsFeVariable<T> & colVar() const { gsNullExpr<T>(); }
+  const gsFeVariable<T> & rowVar() const { gsNullExpr<Scalar>::get(); }
+  const gsFeVariable<T> & colVar() const { gsNullExpr<Scalar>::get(); }
 
   void print(std::ostream &os) const
   { os << "diam(e)"; }
@@ -752,8 +837,8 @@ protected:
 public:
     enum {Space = 0, ScalarValued= 0, ColBlocks= 0};
 
-    auto eval(const index_t k) const ->decltype(this->m_fd->values[0].col(k))
-    { return this->m_fd->values[0].col(k); }
+    typename gsMatrix<T>::constColumn
+    eval(const index_t k) const { return this->m_fd->values[0].col(k); }
 
     const gsGeometryMap<T> & inner() const { return _G;};
 
@@ -806,7 +891,7 @@ public:
     inline const gsMatrix<T> & fixedPart() const {return m_sd->fixedDofs;}
     gsMatrix<T> & fixedPart() {return m_sd->fixedDofs;}
 
-    index_t   id() const {return m_sd->id;}
+    index_t   id() const { return (m_sd ? m_sd->id : -1); }
     void setSpaceData(gsFeSpaceData<T>& sd) {m_sd = &sd;}
 
     index_t   interfaceCont() const {return m_sd->cont;}
@@ -850,6 +935,13 @@ public:
     // space restrictTo(boundaries);
     // space restrictTo(bcRefList domain);
 
+    void setupMapper(gsDofMapper & dofsMapper) const
+    {
+        GISMO_ASSERT( m_sd->mapper.isFinalized(), "The provided dof-mapper is not finalized.");
+        GISMO_ASSERT( m_sd->mapper.mapSize()==static_cast<size_t>(this->source().size()), "The dof-mapper is not consistent.");
+        m_sd->mapper.swap(dofsMapper);
+    }
+
     void setup(const index_t _icont = -1) const
     {
         this->setInterfaceCont(_icont);
@@ -880,289 +972,207 @@ public:
     }
 
     void setup(const gsBoundaryConditions<T> & bc, const index_t dir_values,
-               const index_t _icont = -1, gsDofMapper dofsMapper = gsDofMapper() ) const {
+               const index_t _icont = -1) const
+    {
         this->setInterfaceCont(_icont);
-
-        //m_sd->mapper = gsDofMapper(); //reset ? YES!!!
-        m_sd->mapper = dofsMapper;
-
+        m_sd->mapper = gsDofMapper();
         const gsMultiBasis<T> *mb = dynamic_cast<const gsMultiBasis<T> *>(&this->source());
-
-        if (!m_sd->mapper.isFinalized()) // space has no mapper
+        if (mb != nullptr)
         {
-            if (mb != nullptr) {
-                m_sd->mapper = gsDofMapper(*mb, this->dim());
-                //m_mapper.init(*mb, this->dim()); //bug
-                if (0 == this->interfaceCont()) // Conforming boundaries ?
-                {
-                    for (gsBoxTopology::const_iiterator it = mb->topology().iBegin();
-                         it != mb->topology().iEnd(); ++it) {
-                        mb->matchInterface(*it, m_sd->mapper);
-                    }
-                }
-
-                // Strong Dirichlet conditions
-                gsMatrix<index_t> bnd;
-                for (typename gsBoundaryConditions<T>::const_iterator
-                             it = bc.begin("Dirichlet"); it != bc.end("Dirichlet"); ++it) {
-                    const index_t cc = it->unkComponent();
-                    GISMO_ASSERT(static_cast<size_t>(it->ps.patch) < this->mapper().numPatches(),
-                                 "Problem: a boundary condition is set on a patch id which does not exist.");
-
-                    bnd = mb->basis(it->ps.patch).boundary(it->ps.side());
-                    if (cc == -1)
-                        for (index_t c = 0; c != this->dim(); c++) // for all components
-                            m_sd->mapper.markBoundary(it->ps.patch, bnd, c);
-                    else
-                        m_sd->mapper.markBoundary(it->ps.patch, bnd, cc);
-                }
-                // Clamped boundary condition (per DoF)
-                gsMatrix<index_t> bnd1;
-                for (typename gsBoundaryConditions<T>::const_iterator
-                             it = bc.begin("Clamped"); it != bc.end("Clamped"); ++it) {
-                    const index_t cc = it->unkComponent();
-
-                    GISMO_ASSERT(static_cast<size_t>(it->ps.patch) < this->mapper().numPatches(),
-                                 "Problem: a boundary condition is set on a patch id which does not exist.");
-
-                    bnd = mb->basis(it->ps.patch).boundaryOffset(it->ps.side(), 0);
-                    bnd1 = mb->basis(it->ps.patch).boundaryOffset(it->ps.side(), 1);
-                    // Cast to tensor b-spline basis
-                    if (mb != NULL) // clamp adjacent dofs
-                    {
-                        if (!it->ps.parameter())
-                            bnd.swap(bnd1);
-                        if (cc == -1)
-                            for (index_t c = 0; c != this->dim(); c++) // for all components
-                                for (index_t k = 0; k < bnd.size(); ++k)
-                                    m_sd->mapper.matchDof(it->ps.patch, (bnd)(k, 0),
-                                                          it->ps.patch, (bnd1)(k, 0), c);
-                        else
-                            for (index_t k = 0; k < bnd.size(); ++k)
-                                m_sd->mapper.matchDof(it->ps.patch, (bnd)(k, 0),
-                                                      it->ps.patch, (bnd1)(k, 0), cc);
-                    } else
-                        gsWarn << "Unable to apply clamped condition.\n";
-                }
-
-                // COLLAPSED
-                for (typename gsBoundaryConditions<T>::const_iterator
-                             it = bc.begin("Collapsed"); it != bc.end("Collapsed"); ++it) {
-                    const index_t cc = it->unkComponent();
-
-                    GISMO_ASSERT(static_cast<size_t>(it->ps.patch) < this->mapper().numPatches(),
-                                 "Problem: a boundary condition is set on a patch id which does not exist.");
-
-                    bnd = mb->basis(it->ps.patch).boundary(it->ps.side());
-
-                    // Cast to tensor b-spline basis
-                    if (mb != NULL) // clamp adjacent dofs
-                    {
-                        // match all DoFs to the first one of the side
-                        if (cc == -1)
-                            for (index_t c = 0; c != this->dim(); c++) // for all components
-                                for (index_t k = 0; k < bnd.size() - 1; ++k)
-                                    m_sd->mapper.matchDof(it->ps.patch, (bnd)(0, 0),
-                                                          it->ps.patch, (bnd)(k + 1, 0), c);
-                        else
-                            for (index_t k = 0; k < bnd.size() - 1; ++k)
-                                m_sd->mapper.matchDof(it->ps.patch, (bnd)(0, 0),
-                                                      it->ps.patch, (bnd)(k + 1, 0), cc);
-                    }
-                }
-
-                // corners
-                for (typename gsBoundaryConditions<T>::const_citerator
-                             it = bc.cornerBegin(); it != bc.cornerEnd(); ++it) {
-                    //assumes (unk == -1 || it->unknown == unk)
-                    GISMO_ASSERT(static_cast<size_t>(it->patch) < mb->nBases(),
-                                 "Problem: a corner boundary condition is set on a patch id which does not exist.");
-                    m_sd->mapper.eliminateDof(mb->basis(it->patch).functionAtCorner(it->corner), it->patch);
-                }
-
-            } else if (const gsBasis<T> *b =
-                    dynamic_cast<const gsBasis<T> *>(&this->source())) {
-                m_sd->mapper = gsDofMapper(*b);
-                gsMatrix<index_t> bnd;
-                for (typename gsBoundaryConditions<T>::const_iterator
-                             it = bc.begin("Dirichlet"); it != bc.end("Dirichlet"); ++it) {
-                    GISMO_ASSERT(it->ps.patch == 0,
-                                 "Problem: a boundary condition is set on a patch id which does not exist.");
-
-                    bnd = b->boundary(it->ps.side());
-                    //const index_t cc = it->unkComponent();
-                    m_sd->mapper.markBoundary(0, bnd, 0);
-                }
-
-                m_sd->mapper = gsDofMapper(*b);
-                for (typename gsBoundaryConditions<T>::const_iterator
-                             it = bc.begin("Clamped"); it != bc.end("Clamped"); ++it) {
-                    GISMO_ASSERT(it->ps.patch == 0,
-                                 "Problem: a boundary condition is set on a patch id which does not exist.");
-
-                    bnd = b->boundary(it->ps.side());
-                    //const index_t cc = it->unkComponent();
-                    // m_sd->mapper.markBoundary(0, bnd, 0);
-                }
-
-                m_sd->mapper = gsDofMapper(*b);
-                for (typename gsBoundaryConditions<T>::const_iterator
-                             it = bc.begin("Collapsed"); it != bc.end("Collapsed"); ++it) {
-                    GISMO_ASSERT(it->ps.patch == 0,
-                                 "Problem: a boundary condition is set on a patch id which does not exist.");
-
-                    bnd = b->boundary(it->ps.side());
-                    //const index_t cc = it->unkComponent();
-                    // m_sd->mapper.markBoundary(0, bnd, 0);
-                }
-            } else if (const gsMappedBasis<2, T> *mapb =
-                    dynamic_cast<const gsMappedBasis<2, T> *>(&this->source())) {
-                m_sd->mapper.setIdentity(mapb->nPatches(), mapb->size(), this->dim());
-
-                // Does this work for the D-Patch as well??
-                if (0 == this->interfaceCont()) // C^0 matching interface
-                {
-                    gsMatrix<index_t> int1, int2;
-                    for (gsBoxTopology::const_iiterator it = mapb->getTopol().iBegin();
-                         it != mapb->getTopol().iEnd(); ++it) {
-                        int1 = mapb->basis(it->first().patch).boundaryOffset(it->first().side(), 0);
-                        int2 = mapb->basis(it->second().patch).boundaryOffset(it->second().side(), 0);
-
-                        m_sd->mapper.matchDofs(it->first().patch, int1, it->second().patch, int2);
-                    }
-                }
-                if (1 == this->interfaceCont()) // C^1 matching interface
-                {
-/*
-                    // Not always working bcs of boundaryOffset
-
-                    gsMatrix<index_t> int1, int2;
-                    for (gsBoxTopology::const_iiterator it = mapb->getTopol().iBegin();
-                         it != mapb->getTopol().iEnd(); ++it) {
-                        //mapb->matchInterface(*it, m_sd->mapper);
-                        // copied from matchInterface to do add the function in gsMappedBasis
-                        // should work for all basis which have matchWith() implementeds
-
-                        gsMatrix<index_t> b1, b2;
-                        b1 = mapb->basis(it->first().patch).boundaryOffset(boxSide(it->first().side()), 0);
-                        b2 = mapb->basis(it->second().patch).boundaryOffset(boxSide(it->second().side()), 0);
-
-                        // Match the dofs on the interface
-                        for (size_t i = 0; i != m_sd->mapper.componentsSize(); ++i)
-                            m_sd->mapper.matchDofs(it->first().patch, b1, it->second().patch, b2, i);
-
-                        b1 = mapb->basis(it->first().patch).boundaryOffset(boxSide(it->first().side()), 1);
-                        b2 = mapb->basis(it->second().patch).boundaryOffset(boxSide(it->second().side()), 1);
-
-                        // Match the dofs on the interface
-                        for (size_t i = 0; i != m_sd->mapper.componentsSize(); ++i)
-                            m_sd->mapper.matchDofs(it->first().patch, b1, it->second().patch, b2, i);
-                    }
-*/
-                }
-
-                gsMatrix<index_t> bnd;
-                for (typename gsBoundaryConditions<T>::const_iterator
-                             it = bc.begin("Dirichlet"); it != bc.end("Dirichlet"); ++it) {
-                    const index_t cc = it->unkComponent();
-                    GISMO_ASSERT(static_cast<size_t>(it->ps.patch) < this->mapper().numPatches(),
-                                 "Problem: a boundary condition is set on a patch id which does not exist.");
-
-                    bnd = mapb->basis(it->ps.patch).boundary(it->ps.side());
-                    if (cc == -1)
-                        for (index_t c = 0; c != this->dim(); c++) // for all components
-                            m_sd->mapper.markBoundary(it->ps.patch, bnd, c);
-                    else
-                        m_sd->mapper.markBoundary(it->ps.patch, bnd, cc);
-                }
-
-                // Not always working bcs of boundaryOffset
-                // Enfore Neumann strongly!!!
-/*
-                for (typename gsBoundaryConditions<real_t>::const_iterator
-                             it = bc.begin("Strong Neumann"); it != bc.end("Strong Neumann"); ++it) {
-                    const index_t cc = it->unkComponent();
-
-                    bnd = mapb->basis(it->ps.patch).boundaryOffset(it->ps.side(),1);
-                    if (cc == -1)
-                        for (index_t c = 0; c != this->dim(); c++) // for all components
-                            m_sd->mapper.markBoundary(it->ps.patch, bnd, c);
-                    else
-                        m_sd->mapper.markBoundary(it->ps.patch, bnd, cc);
-                }
-*/
-                // Clamped boundary condition (per DoF)
-                gsMatrix<index_t> bnd1;
-                for (typename gsBoundaryConditions<T>::const_iterator
-                             it = bc.begin("Clamped"); it != bc.end("Clamped"); ++it) {
-                    const index_t cc = it->unkComponent();
-
-                    GISMO_ASSERT(static_cast<size_t>(it->ps.patch) < this->mapper().numPatches(),
-                                 "Problem: a boundary condition is set on a patch id which does not exist.");
-
-                    bnd = mapb->basis(it->ps.patch).boundaryOffset(it->ps.side(), 0);
-                    bnd1 = mapb->basis(it->ps.patch).boundaryOffset(it->ps.side(), 1);
-
-                    // Cast to tensor b-spline basis
-                    if (mapb != NULL) // clamp adjacent dofs
-                    {
-                        if (!it->ps.parameter())
-                            bnd.swap(bnd1);
-                        if (cc == -1)
-                            for (index_t c = 0; c != this->dim(); c++) // for all components
-                                for (index_t k = 0; k < bnd.size(); ++k)
-                                    m_sd->mapper.matchDof(it->ps.patch, (bnd)(k, 0),
-                                                          it->ps.patch, (bnd1)(k, 0), c);
-                        else
-                            for (index_t k = 0; k < bnd.size(); ++k)
-                                m_sd->mapper.matchDof(it->ps.patch, (bnd)(k, 0),
-                                                      it->ps.patch, (bnd1)(k, 0), cc);
-                    } else
-                        gsWarn << "Unable to apply clamped condition.\n";
-                }
-
-                // COLLAPSED
-                for (typename gsBoundaryConditions<T>::const_iterator
-                             it = bc.begin("Collapsed"); it != bc.end("Collapsed"); ++it) {
-                    const index_t cc = it->unkComponent();
-
-                    GISMO_ASSERT(static_cast<size_t>(it->ps.patch) < this->mapper().numPatches(),
-                                 "Problem: a boundary condition is set on a patch id which does not exist.");
-
-                    bnd = mapb->basis(it->ps.patch).boundary(it->ps.side());
-
-                    // Cast to tensor b-spline basis
-                    if (mapb != NULL) // clamp adjacent dofs
-                    {
-                        // match all DoFs to the first one of the side
-                        if (cc == -1)
-                            for (index_t c = 0; c != this->dim(); c++) // for all components
-                                for (index_t k = 0; k < bnd.size() - 1; ++k)
-                                    m_sd->mapper.matchDof(it->ps.patch, (bnd)(0, 0),
-                                                          it->ps.patch, (bnd)(k + 1, 0), c);
-                        else
-                            for (index_t k = 0; k < bnd.size() - 1; ++k)
-                                m_sd->mapper.matchDof(it->ps.patch, (bnd)(0, 0),
-                                                      it->ps.patch, (bnd)(k + 1, 0), cc);
-                    }
-                }
-
-                // corners
-                for (typename gsBoundaryConditions<T>::const_citerator
-                             it = bc.cornerBegin(); it != bc.cornerEnd(); ++it) {
-                    //assumes (unk == -1 || it->unknown == unk)
-                    GISMO_ASSERT(static_cast<size_t>(it->patch) < mb->nBases(),
-                                 "Problem: a corner boundary condition is set on a patch id which does not exist.");
-                    m_sd->mapper.eliminateDof(mapb->basis(it->patch).functionAtCorner(it->corner), it->patch);
-                }
-            } else
+            m_sd->mapper = gsDofMapper(*mb, this->dim());
+            //m_mapper.init(*mb, this->dim()); //bug
+            if (0 == this->interfaceCont()) // Conforming boundaries ?
             {
-                GISMO_ASSERT(0 == bc.size(), "Problem: BCs are ignored.");
-                m_sd->mapper.setIdentity(this->source().nPieces(), this->source().size());
+                for (gsBoxTopology::const_iiterator it = mb->topology().iBegin();
+                     it != mb->topology().iEnd(); ++it) {
+                    mb->matchInterface(*it, m_sd->mapper);
+                }
             }
 
-            m_sd->mapper.finalize();
+            // Strong Dirichlet conditions
+            gsMatrix<index_t> bnd;
+            for (typename gsBoundaryConditions<T>::const_iterator
+                     it = bc.begin("Dirichlet"); it != bc.end("Dirichlet"); ++it)
+            {
+                const index_t cc = it->unkComponent();
+                GISMO_ASSERT(static_cast<size_t>(it->ps.patch) < this->mapper().numPatches(),
+                             "Problem: a boundary condition is set on a patch id which does not exist.");
+
+                bnd = mb->basis(it->ps.patch).boundary(it->ps.side());
+                m_sd->mapper.markBoundary(it->ps.patch, bnd, cc);
+            }
+            // Clamped boundary condition (per DoF)
+            gsMatrix<index_t> bnd1;
+            for (typename gsBoundaryConditions<T>::const_iterator
+                     it = bc.begin("Clamped"); it != bc.end("Clamped"); ++it)
+            {
+                const index_t cc = it->unkComponent();
+
+                GISMO_ASSERT(static_cast<size_t>(it->ps.patch) < this->mapper().numPatches(),
+                             "Problem: a boundary condition is set on a patch id which does not exist.");
+
+                bnd = mb->basis(it->ps.patch).boundaryOffset(it->ps.side(), 0);
+                bnd1 = mb->basis(it->ps.patch).boundaryOffset(it->ps.side(), 1);
+                // Cast to tensor b-spline basis
+                if (!it->ps.parameter())
+                        bnd.swap(bnd1);
+                for (index_t k = 0; k < bnd.size(); ++k)
+                    m_sd->mapper.matchDof(it->ps.patch, (bnd)(k, 0),
+                                          it->ps.patch, (bnd1)(k, 0), cc);
+            }
+
+            // Collapsed
+            for (typename gsBoundaryConditions<T>::const_iterator
+                     it = bc.begin("Collapsed"); it != bc.end("Collapsed"); ++it)
+            {
+                const index_t cc = it->unkComponent();
+
+                GISMO_ASSERT(static_cast<size_t>(it->ps.patch) < this->mapper().numPatches(),
+                             "Problem: a boundary condition is set on a patch id which does not exist.");
+
+                bnd = mb->basis(it->ps.patch).boundary(it->ps.side());
+
+                // match all DoFs to the first one of the side
+                for (index_t k = 0; k < bnd.size() - 1; ++k)
+                    m_sd->mapper.matchDof(it->ps.patch, (bnd)(0, 0),
+                                          it->ps.patch, (bnd)(k + 1, 0), cc);
+            }
+
+            // corners
+            for (typename gsBoundaryConditions<T>::const_citerator
+                     it = bc.cornerBegin(); it != bc.cornerEnd(); ++it)
+            {
+                //assumes (unk == -1 || it->unknown == unk)
+                GISMO_ASSERT(static_cast<size_t>(it->patch) < mb->nBases(),
+                             "Problem: a corner boundary condition is set on a patch id which does not exist.");
+                m_sd->mapper.eliminateDof(mb->basis(it->patch).functionAtCorner(it->corner),
+                                          it->patch, it->unknown);
+            }
+
+        } else if (const gsBasis<T> *b =
+                   dynamic_cast<const gsBasis<T> *>(&this->source()))
+        {
+            m_sd->mapper = gsDofMapper(*b, this->dim() );
+            gsMatrix<index_t> bnd;
+            for (typename gsBoundaryConditions<T>::const_iterator
+                     it = bc.begin("Dirichlet"); it != bc.end("Dirichlet"); ++it) {
+                GISMO_ASSERT(it->ps.patch == 0,
+                             "Problem: a boundary condition is set on a patch id which does not exist.");
+
+                bnd = b->boundary(it->ps.side());
+                m_sd->mapper.markBoundary(0, bnd, it->unkComponent());
+            }
+
+            for (typename gsBoundaryConditions<T>::const_iterator
+                     it = bc.begin("Clamped"); it != bc.end("Clamped"); ++it) {
+                GISMO_ASSERT(it->ps.patch == 0,
+                             "Problem: a boundary condition is set on a patch id which does not exist.");
+
+                bnd = b->boundary(it->ps.side());
+                //const index_t cc = it->unkComponent();
+                // m_sd->mapper.markBoundary(0, bnd, 0);
+            }
+
+            m_sd->mapper = gsDofMapper(*b);
+            for (typename gsBoundaryConditions<T>::const_iterator
+                     it = bc.begin("Collapsed"); it != bc.end("Collapsed"); ++it) {
+                GISMO_ASSERT(it->ps.patch == 0,
+                             "Problem: a boundary condition is set on a patch id which does not exist.");
+
+                bnd = b->boundary(it->ps.side());
+                //const index_t cc = it->unkComponent();
+                // m_sd->mapper.markBoundary(0, bnd, 0);
+            }
+        } else if (const gsMappedBasis<2, T> *mapb =
+                   dynamic_cast<const gsMappedBasis<2, T> *>(&this->source())) {
+            m_sd->mapper.setIdentity(mapb->nPatches(), mapb->size(), this->dim());
+
+            if (0 == this->interfaceCont()) // C^0 matching interface
+            {
+                gsMatrix<index_t> int1, int2;
+                for (gsBoxTopology::const_iiterator it = mapb->getTopol().iBegin();
+                     it != mapb->getTopol().iEnd(); ++it) {
+                    int1 = mapb->basis(it->first().patch).boundaryOffset(it->first().side(), 0);
+                    int2 = mapb->basis(it->second().patch).boundaryOffset(it->second().side(), 0);
+
+                    m_sd->mapper.matchDofs(it->first().patch, int1, it->second().patch, int2);
+                }
+            }
+            if (1 == this->interfaceCont()) // C^1 matching interface
+            {
+                GISMO_ERROR("Boundary offset function is not implemented for gsMappedBasis in general.");
+            }
+
+            gsMatrix<index_t> bnd;
+            for (typename gsBoundaryConditions<T>::const_iterator
+                     it = bc.begin("Dirichlet"); it != bc.end("Dirichlet"); ++it) {
+                const index_t cc = it->unkComponent();
+                GISMO_ASSERT(static_cast<size_t>(it->ps.patch) < this->mapper().numPatches(),
+                             "Problem: a boundary condition is set on a patch id which does not exist.");
+
+                bnd = mapb->basis(it->ps.patch).boundary(it->ps.side());
+                m_sd->mapper.markBoundary(it->ps.patch, bnd, cc);
+            }
+
+            // Clamped boundary condition (per DoF)
+            gsMatrix<index_t> bnd1;
+            for (typename gsBoundaryConditions<T>::const_iterator
+                     it = bc.begin("Clamped"); it != bc.end("Clamped"); ++it) {
+                const index_t cc = it->unkComponent();
+
+                GISMO_ASSERT(static_cast<size_t>(it->ps.patch) < this->mapper().numPatches(),
+                             "Problem: a boundary condition is set on a patch id which does not exist.");
+
+                bnd = mapb->basis(it->ps.patch).boundaryOffset(it->ps.side(), 0);
+                bnd1 = mapb->basis(it->ps.patch).boundaryOffset(it->ps.side(), 1);
+
+                // Cast to tensor b-spline basis
+                if (mapb != NULL) // clamp adjacent dofs
+                {
+                    if (!it->ps.parameter())
+                        bnd.swap(bnd1);
+                    for (index_t k = 0; k < bnd.size(); ++k)
+                        m_sd->mapper.matchDof(it->ps.patch, (bnd)(k, 0),
+                                              it->ps.patch, (bnd1)(k, 0), cc);
+                } else
+                    gsWarn << "Unable to apply clamped condition.\n";
+            }
+
+            // COLLAPSED
+            for (typename gsBoundaryConditions<T>::const_iterator
+                     it = bc.begin("Collapsed"); it != bc.end("Collapsed"); ++it) {
+                const index_t cc = it->unkComponent();
+
+                GISMO_ASSERT(static_cast<size_t>(it->ps.patch) < this->mapper().numPatches(),
+                             "Problem: a boundary condition is set on a patch id which does not exist.");
+
+                bnd = mapb->basis(it->ps.patch).boundary(it->ps.side());
+
+                // Cast to tensor b-spline basis
+                if (mapb != NULL) // clamp adjacent dofs
+                {
+                    // match all DoFs to the first one of the side
+                    for (index_t k = 0; k < bnd.size() - 1; ++k)
+                        m_sd->mapper.matchDof(it->ps.patch, (bnd)(0, 0),
+                                              it->ps.patch, (bnd)(k + 1, 0), cc);
+                }
+            }
+
+            // corners
+            for (typename gsBoundaryConditions<T>::const_citerator
+                     it = bc.cornerBegin(); it != bc.cornerEnd(); ++it) {
+                //assumes (unk == -1 || it->unknown == unk)
+                GISMO_ASSERT(static_cast<size_t>(it->patch) < mb->nBases(),
+                             "Problem: a corner boundary condition is set on a patch id which does not exist.");
+                m_sd->mapper.eliminateDof(mapb->basis(it->patch).functionAtCorner(it->corner), it->patch);
+            }
+        } else
+        {
+            GISMO_ASSERT(0 == bc.size(), "Problem: BCs are ignored.");
+            m_sd->mapper.setIdentity(this->source().nPieces(), this->source().size());
         }
+
+        m_sd->mapper.finalize();
 
         // Compute Dirichlet node values
         gsDirichletValues(bc, dir_values, *this);
@@ -1179,12 +1189,17 @@ public:
         }
     }
 
+    void print(std::ostream &os) const { os << "u"; }
+
 protected:
     friend class gismo::gsExprHelper<Scalar>;
     friend class symbol_expr<gsFeSpace>;
     explicit gsFeSpace(index_t _d = 1) : Base(_d), m_sd(nullptr) { }
 };
 
+template<class T> inline bool
+operator== (const gsFeSpace<T> & a, const gsFeSpace<T> & b)
+{ return a.id()== b.id() && a.isAcross()==b.isAcross(); }
 
 /*
   Expression representing a function given by a vector of
@@ -1249,6 +1264,9 @@ public:
     //template<class U>
     //linearComb(U & ie){ sum up ie[_u] times the _Sv  }
     // ie.eval(k), _u.data().actives(), fixedPart() - see lapl_expr
+
+    const gsFeSpace<Scalar> & rowVar() const {return gsNullExpr<Scalar>::get();}
+    const gsFeSpace<Scalar> & colVar() const {return gsNullExpr<Scalar>::get();}
     
     index_t rows() const {return _u.dim(); }
 
@@ -1292,15 +1310,9 @@ public:
     void extractFull(gsMatrix<T> & result) const
     {
         index_t offset;
-
         const index_t dim = _u.dim();
-
-        size_t totalSz = 0;
-        for (index_t c = 0; c!=dim; c++) // for all components
-            totalSz += _u.mapper().totalSize(c);
-
-        //result.resize(_u.mapper().size(), 1); // (!)
-        result.resize(totalSz, 1); // (!)
+        const size_t totalSz = _u.mapper().mapSize();
+        result.resize(totalSz, 1);
         for (size_t p=0; p!=_u.mapper().numPatches(); ++p)
         {
             offset = _u.mapper().offset(p);
@@ -1371,7 +1383,7 @@ public:
                 /*
                   else
                   {
-                    fixedPart.row(m_sd->mapper.global_to_bindex(ii)) = cf.row(i);
+                  fixedPart.row(m_sd->mapper.global_to_bindex(ii)) = cf.row(i);
                   }
                 */
             }
@@ -1383,7 +1395,6 @@ public:
   Expression for the transpose of an expression
 */
 template<class E>
-//class tr_expr<E,false>  : public _expr<tr_expr<E,false> >
 class tr_expr : public _expr<tr_expr<E> >
 {
     typename E::Nested_t _u;
@@ -1397,22 +1408,16 @@ public:
 
 public:
     enum {ColBlocks = E::ColBlocks, ScalarValued=E::ScalarValued};
-    enum {Space = (E::Space==0?0:(E::Space==1?2:1))};
+    enum {Space = (E::Space==1?2:(E::Space==2?1:E::Space))};
 
     mutable Temporary_t res;
     const Temporary_t & eval(const index_t k) const
     {
-        //return _u.eval(k).transpose();
         if (E::ColBlocks)
-        {
-            res = _u.eval(k).blockTranspose( _u.cardinality() ); return res;
-            //return _u.eval(k).blockTranspose(_u.cols()/_u.rows());
-        }
+            res = _u.eval(k).blockTranspose( _u.cardinality() );
         else
-        {
-            res = _u.eval(k).transpose(); return res;
-            //return _u.eval(k).blockTranspose(1); // buggy ?
-        }
+            res = _u.eval(k).transpose();
+        return res;
     }
 
     index_t rows() const { return _u.cols(); }
@@ -1754,7 +1759,7 @@ class flat_expr  : public _expr<flat_expr<E> >
 public:
     typedef typename E::Scalar Scalar;
     enum {ScalarValued = 0, Space = E::Space, ColBlocks= 0}; // to do: ColBlocks
- private:
+private:
     typename E::Nested_t _u;
     mutable gsMatrix<Scalar> tmp;
 
@@ -1859,11 +1864,11 @@ flat_expr<E> const flat(E const & u)
         typename E::Nested_t _u;                                        \
     public:                                                             \
     typedef typename E::Scalar Scalar;                                  \
-    enum {Space= E::Space, ScalarValued= isSv, ColBlocks= E::ColBlocks};\
+    enum {Space= E::Space, ScalarValued= isSv, ColBlocks= E::ColBlocks}; \
     name##_##expr(_expr<E> const& u) : _u(u) { }                        \
     mutable Temporary_t tmp;                                            \
     const Temporary_t & eval(const index_t k) const {                   \
-    tmp = _u.eval(k).mname(); return tmp; }                             \
+        tmp = _u.eval(k).mname(); return tmp; }                         \
     index_t rows() const { return isSv ? 0 : _u.rows(); }               \
     index_t cols() const { return isSv ? 0 : _u.cols(); }               \
     void parse(gsExprHelper<Scalar> & evList) const { _u.parse(evList); } \
@@ -1878,7 +1883,7 @@ GISMO_EXPR_VECTOR_EXPRESSION(norm,norm,1);
 /// Squared Eucledian Norm
 GISMO_EXPR_VECTOR_EXPRESSION(sqNorm,squaredNorm,1);
 /// Normalization of a vector to unit measure
-GISMO_EXPR_VECTOR_EXPRESSION(normalized,normalized,0); // (!) mem.
+GISMO_EXPR_VECTOR_EXPRESSION(normalized,normalized,0);
 /// Inverse of a matrix expression
 GISMO_EXPR_VECTOR_EXPRESSION(inv,cramerInverse,0);
 // GISMO_EXPR_VECTOR_EXPRESSION(cwSqr,array().square,0)
@@ -2108,11 +2113,6 @@ public:
     void print(std::ostream &os) const { os<<"pow("; _u.print(os); os <<")"; }
 };
 
-// Call as pow(a,b)
-template<class E>
-pow_expr<E> pow(_expr<E> const& u, real_t q) { return pow_expr<E>(u,q); }
-
-
 /**
    computes outer products of a matrix by a space of dimension > 1
    [Jg Jg Jg] * Jb ..
@@ -2277,11 +2277,7 @@ class abs_expr  : public _expr<abs_expr<E> >
 
 public:
     typedef typename E::Scalar Scalar;
-    abs_expr(_expr<E> const& u) : _u(u)
-    {
-        // rows/cols not known at construction time
-        //GISMO_ASSERT(u.rows()*u.cols()<=1, "Expression\n"<<u<<"is not a scalar.");
-    }
+    explicit abs_expr(_expr<E> const& u) : _u(u) { }
 
 public:
     enum {Space= 0, ScalarValued= 1, ColBlocks= 0};
@@ -2415,8 +2411,12 @@ public:
     }
 
     index_t rows() const {return _u.dim();}
-
     index_t cols() const {return _u.parDim(); }
+
+    const gsFeSpace<Scalar> & rowVar() const
+    {return gsNullExpr<Scalar>::get();}
+    const gsFeSpace<Scalar> & colVar() const
+    {return gsNullExpr<Scalar>::get();}
 
     void parse(gsExprHelper<Scalar> & evList) const
     {
@@ -2527,7 +2527,7 @@ public:
 
     const gsFeSpace<T> & rowVar() const { return u.rowVar(); }
     const gsFeSpace<T> & colVar() const
-    {return gsNullExpr<T>();}
+    {return gsNullExpr<Scalar>::get();}
 
     void print(std::ostream &os) const { os << "nabla("; u.print(os); os <<")"; }
 };
@@ -2684,9 +2684,9 @@ public:
         }
         else if (_G.targetDim()==3)
         {
-            res.template head<3>() =
-                _G.data().normals.col(k).template head<3>()
-                .cross( _G.data().outNormals.col(k).template head<3>() );
+            res.resize(3);
+            res.col3d(0) = _G.data().normals.col3d(k)
+                .cross( _G.data().outNormals.col3d(k) );
             return res;
         }
         else
@@ -2884,8 +2884,8 @@ public:
 
     mutable gsMatrix<Scalar> res;
 
-    jac_expr(const E & _u)
-    : _u(_u) { }
+    jac_expr(const E & _u_)
+    : _u(_u_) { }
 
     MatExprType eval(const index_t k) const
     {
@@ -3212,41 +3212,6 @@ public:
 
 
 /*
-  Expression for the measure of a geometry map
-*/
-template<class T>
-class meas_expr : public _expr<meas_expr<T> >
-{
-    typename gsGeometryMap<T>::Nested_t _G;
-
-public:
-    enum {Space = 0, ScalarValued = 1, ColBlocks = 0};
-
-    typedef T Scalar;
-
-    meas_expr(const gsGeometryMap<T> & G) : _G(G) { }
-
-    T eval(const index_t k) const
-    {
-        return _G.data().measures.at(k);
-    }
-
-    index_t rows() const { return 0; }
-    index_t cols() const { return 0; }
-    void parse(gsExprHelper<Scalar> & evList) const
-    {
-        evList.add(_G);
-        _G.data().flags |= NEED_MEASURE;
-    }
-
-    const gsFeSpace<T> & rowVar() const { return gsNullExpr<T>::get(); }
-    const gsFeSpace<T> & colVar() const { return gsNullExpr<T>::get(); }
-
-    void print(std::ostream &os) const { os << "meas("; _G.print(os); os <<")"; }
-};
-
-
-/*
   Expression for the curl
 */
 template<class T>
@@ -3312,8 +3277,8 @@ class mult_expr<E1,E2,false> : public _expr<mult_expr<E1, E2, false> >
 
 public:
     enum {ScalarValued = E1::ScalarValued && E2::ScalarValued,
-          ColBlocks = E2::ColBlocks};
-    enum {Space = E1::Space + E2::Space };
+        ColBlocks = E2::ColBlocks};
+    enum {Space = (int)E1::Space + (int)E2::Space };
 
     typedef typename E1::Scalar Scalar;
 
@@ -3327,8 +3292,6 @@ public:
         GISMO_ASSERT(0==_u.cols()*_v.rows() || _u.cols() == _v.rows(),
                      "Wrong dimensions "<<_u.cols()<<"!="<<_v.rows()<<" in * operation:\n"
                      << _u <<" times \n" << _v );
-        //gsDebugVar(_u.eval(k));
-        //gsDebugVar(_v.eval(k));
 
         // Note: a * b * c --> (a*b).eval()*c
         tmp = _u.eval(k) * _v.eval(k);
@@ -3377,7 +3340,7 @@ private:
     mutable gsMatrix<Scalar> res;
 public:
     enum {ScalarValued = 0, ColBlocks = E2::ColBlocks};
-    enum {Space = E1::Space + E2::Space };
+    enum {Space = (int)E1::Space + (int)E2::Space };
 
     mult_expr(_expr<E1> const& u,
               _expr<E2> const& v)
@@ -3490,6 +3453,8 @@ public:
     void parse(gsExprHelper<Scalar> & evList) const
     { _v.parse(evList); }
 
+    index_t cardinality_impl() const
+    { return _v.cardinality(); }
 
     const gsFeSpace<Scalar> & rowVar() const { return _v.rowVar(); }
     const gsFeSpace<Scalar> & colVar() const { return _v.colVar(); }
@@ -3506,7 +3471,7 @@ class collapse_expr : public _expr<collapse_expr<E1, E2> >
 
 public:
     enum {ScalarValued = 0, ColBlocks = 0};
-    enum { Space = E1::Space + E2::Space };
+    enum { Space = (int)E1::Space + (int)E2::Space };
 
     typedef typename E1::Scalar Scalar;
 
@@ -3581,7 +3546,7 @@ class frprod_expr : public _expr<frprod_expr<E1, E2> >
 public:
     typedef typename E1::Scalar Scalar;
     enum {ScalarValued = 0, ColBlocks=E2::ColBlocks};
-    enum { Space = E1::Space + E2::Space };
+    enum { Space = (int)E1::Space + (int)E2::Space };
     // E1 E2 this (16 cases..)
     // 0  0  0
     // 1  1
@@ -3819,7 +3784,7 @@ class add_expr : public _expr<add_expr<E1, E2> >
 
 public:
     enum {ScalarValued = E1::ScalarValued && E2::ScalarValued,
-          ColBlocks = E1::ColBlocks || E2::ColBlocks };
+        ColBlocks = E1::ColBlocks || E2::ColBlocks };
     enum {Space = E1::Space}; // == E2::Space
 
     typedef typename E1::Scalar Scalar;
@@ -3827,11 +3792,13 @@ public:
     add_expr(_expr<E1> const& u, _expr<E2> const& v)
     : _u(u), _v(v)
     {
-        //GISMO_ASSERT((int)E1::ColBlocks == (int)E2::ColBlocks,
-        //             "Error: "<< E1::ColBlocks <<"!="<< E2::ColBlocks);
+        GISMO_ENSURE((int)E1::Space == (int)E2::Space &&
+                     _u.rowVar()==_v.rowVar() && _u.colVar()==_v.colVar(),
+                     "Error: adding apples and oranges (use comma instead),"
+                     " namely:\n" << _u <<"\n"<<_v);
     }
-    mutable Temporary_t res;
 
+    mutable Temporary_t res;
     const Temporary_t & eval(const index_t k) const
     {
         GISMO_ASSERT(_u.rows() == _v.rows(),
@@ -3920,10 +3887,8 @@ public:
     const gsFeSpace<Scalar> & rowVar() const { return _u.rowVar(); }
     const gsFeSpace<Scalar> & colVar() const { return gsNullExpr<Scalar>::get(); }
 
-    index_t cardinality_impl() const {
-        GISMO_ERROR("A");
-        return 0;
-    }
+    index_t cardinality_impl() const
+    { GISMO_ERROR("Something went terribly wrong"); }
 
     void print(std::ostream &os) const
     { os << "sum("; _M.print(os); os<<","; _u.print(os); os<<")"; }
@@ -3947,7 +3912,7 @@ class sub_expr : public _expr<sub_expr<E1, E2> >
 
 public:
     enum {ScalarValued = E1::ScalarValued && E2::ScalarValued,
-          ColBlocks = E1::ColBlocks || E2::ColBlocks };
+        ColBlocks = E1::ColBlocks || E2::ColBlocks };
     enum {Space = E1::Space}; // == E2::Space
 
     typedef typename E1::Scalar Scalar;
@@ -3955,12 +3920,19 @@ public:
     sub_expr(_expr<E1> const& u, _expr<E2> const& v)
     : _u(u), _v(v)
     {
-        //GISMO_STATIC_ASSERT((int)E1::ColBlocks == (int)E2::ColBlocks, "Cannot subtract if the number of colums do not agree.");
+        GISMO_ENSURE((int)E1::Space == (int)E2::Space &&
+                     _u.rowVar()==_v.rowVar() && _u.colVar()==_v.colVar(),
+                     "Error: substracting apples from oranges (use comma instead),"
+                     " namely:\n" << _u <<"\n"<<_v);
     }
 
     mutable Temporary_t res;
     const Temporary_t & eval(const index_t k) const
     {
+        // GISMO_ASSERT(_u.rowVar().id()==_v.rowVar().id() && _u.rowVar().isAcross()==_v.rowVar().isAcross(),
+        //     "The row spaces are not split compatibly.");
+        // GISMO_ASSERT(_u.colVar().id()==_v.colVar().id() && _u.colVar().isAcross()==_v.colVar().isAcross(),
+        //     "The col spaces are not split compatibly.");
         GISMO_ASSERT(_u.rows() == _v.rows(),
                      "Wrong dimensions "<<_u.rows()<<"!="<<_v.rows()<<" in - operation:\n" << _u <<" minus \n" << _v );
         GISMO_ASSERT(_u.cols() == _v.cols(),
@@ -4037,7 +4009,7 @@ class symmetrize_expr : public _expr<symmetrize_expr<E> >
 
     mutable gsMatrix<typename E::Scalar> tmp;
 public:
-    enum { Space = (0==E::Space ? 0 : E::Space), ScalarValued=E::ScalarValued, ColBlocks= E::ColBlocks };
+    enum { Space = (0==E::Space ? 0 : 3), ScalarValued=E::ScalarValued, ColBlocks= E::ColBlocks };
     typedef typename E::Scalar Scalar;
 
     symmetrize_expr(_expr<E> const& u)
@@ -4073,11 +4045,12 @@ public:
 #undef AutoReturn_t
 //----------------------------------------------------------------------------------
 
-// Returns the unit as an expression
-//EIGEN_STRONG_INLINE _expr<real_t> one() { return _expr<real_t>(1); }
-
 /// The identity matrix of dimension \a dim
 EIGEN_STRONG_INLINE idMat_expr id(const index_t dim) { return idMat_expr(dim); }
+
+// Returns the unit as an expression
+//EIGEN_STRONG_INLINE _expr<real_t> one() { return _expr<real_t,true>(1); }
+
 
 /// Absolute value
 template<class E> EIGEN_STRONG_INLINE
@@ -4157,19 +4130,16 @@ template <typename E2> EIGEN_STRONG_INLINE
 mult_expr<typename E2::Scalar,E2,false> const
 operator*(typename E2::Scalar const& u, _expr<E2> const& v)
 { return mult_expr<typename E2::Scalar, E2, false>(u, v); }
-//{ return mult_expr<_expr<typename E2::Scalar>,E2, false>(u, v); }
 
 template <typename E1> EIGEN_STRONG_INLINE
 mult_expr<typename E1::Scalar,E1,false> const
 operator*(_expr<E1> const& v, typename E1::Scalar const& u)
 { return mult_expr<typename E1::Scalar,E1, false>(u, v); }
-//{ return mult_expr<_expr<typename E1::Scalar>,E1, false>(u, v); }
 
 template <typename E1> EIGEN_STRONG_INLINE
 mult_expr<typename E1::Scalar,E1,false> const
 operator-(_expr<E1> const& u)
 { return mult_expr<typename E1::Scalar,E1, false>(-1, u); }
-//{ return mult_expr<_expr<typename E1::Scalar>,E1, false>(-1, u); }
 
 /*
   template <typename E1> mult_expr<gsMatrix<typename E1::Scalar>,E1,false> const
@@ -4247,7 +4217,9 @@ GISMO_SHORTCUT_VAR_EXPRESSION(  div, jac(u).trace() )
 GISMO_SHORTCUT_PHY_EXPRESSION( idiv, ijac(u,G).trace()    )
 
 // The unit (normalized) boundary (outer pointing) normal
-GISMO_SHORTCUT_MAP_EXPRESSION(unv, nv(G).normalized()   ) //(!) bug + mem. leak
+GISMO_SHORTCUT_MAP_EXPRESSION(unv, nv(G).normalized()   )
+// The unit (normalized) boundary (surface) normal
+GISMO_SHORTCUT_MAP_EXPRESSION(usn, sn(G).normalized()   )
 
 GISMO_SHORTCUT_PHY_EXPRESSION(igrad, grad(u)*jac(G).ginv() ) // transpose() problem ??
 GISMO_SHORTCUT_VAR_EXPRESSION(igrad, grad(u) ) // u is presumed to be defined over G
