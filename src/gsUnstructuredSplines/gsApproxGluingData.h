@@ -127,12 +127,14 @@ void gsApproxGluingData<d, T>::setGlobalGluingData(index_t patchID, index_t dir)
     map.finalize();
 
     gsBoundaryConditions<> bc_empty;
-    u.setup(bc_empty, dirichlet::user, -1, map);
+    u.setupMapper(map);
+
+    gsMatrix<T> & fixedDofs = const_cast<expr::gsFeSpace<T>&>(u).fixedPart();
+    fixedDofs.setZero( u.mapper().boundarySize(), 1 );
 
     // For the boundary
     gsMatrix<> points_bdy(1,2);
     points_bdy << 0.0, 1.0;
-    gsMatrix<real_t> & fixedDofs = const_cast<expr::gsFeSpace<real_t>& >(u).fixedPart();
     if (interpolate_boundary)
         fixedDofs = alpha.eval(points_bdy).transpose();
 

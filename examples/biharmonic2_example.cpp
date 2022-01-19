@@ -36,7 +36,7 @@ void setMapperForBiharmonic(gsBoundaryConditions<> & bc, gsMappedBasis<2,real_t>
     }
 
     for (typename gsBoundaryConditions<real_t>::const_iterator
-             it = bc.begin("Strong Neumann"); it != bc.end("Strong Neumann"); ++it)
+             it = bc.begin("Neumann"); it != bc.end("Neumann"); ++it)
     {
         bnd = bb2.basis(it->ps.patch).boundaryOffset(it->ps.side(),1);
         mapper.markBoundary(it->ps.patch, bnd, 0);
@@ -49,7 +49,6 @@ void gsDirichletNeumannValuesL2Projection2(gsMultiPatch<> & mp, gsMultiBasis<> &
                                            gsMappedBasis<2,real_t> & bb2, const expr::gsFeSpace<real_t> & u)
 {
     gsDofMapper mapper = u.mapper();
-    gsMatrix<real_t> & fixedDofs = const_cast<expr::gsFeSpace<real_t>& >(u).fixedPart();
 
     gsMatrix<index_t> bnd = mapper.findFree(mapper.numPatches()-1);
     gsDofMapper mapperBdy;
@@ -64,7 +63,9 @@ void gsDirichletNeumannValuesL2Projection2(gsMultiPatch<> & mp, gsMultiBasis<> &
     auto uu = A.getSpace(bb2);
     auto g_bdy = A.getBdrFunction(G);
 
-    uu.setup(bc, dirichlet::user, -1, mapperBdy);
+    uu.setupMapper(mapperBdy);
+    gsMatrix<real_t> & fixedDofs_A = const_cast<expr::gsFeSpace<real_t>&>(uu).fixedPart();
+    fixedDofs_A.setZero( uu.mapper().boundarySize(), 1 );
 
     real_t lambda = 1e-5;
 
@@ -78,6 +79,7 @@ void gsDirichletNeumannValuesL2Projection2(gsMultiPatch<> & mp, gsMultiBasis<> &
 
     gsSparseSolver<>::SimplicialLDLT solver;
     solver.compute( A.matrix() );
+    gsMatrix<real_t> & fixedDofs = const_cast<expr::gsFeSpace<real_t>& >(u).fixedPart();
     fixedDofs = solver.solve(A.rhs());
 }
 
@@ -157,7 +159,7 @@ int main(int argc, char *argv[])
 
             bc.addCondition(*bit, condition_type::dirichlet, &ms);
             if (neumann)
-                bc.addCondition(*bit, condition_type::strong_neumann, &sol1der);
+                bc.addCondition(*bit, condition_type::neumann, &sol1der);
             else
                 bc.addCondition(*bit, condition_type::laplace, &laplace);
         }
@@ -254,7 +256,7 @@ int main(int argc, char *argv[])
             setMapperForBiharmonic(bc, bb2,map);
 
             // Setup the system
-            u.setup(bc, dirichlet::user, -1, map);
+            u.setupMapper(map);
             gsDirichletNeumannValuesL2Projection2(mp, dbasis, bc, bb2, u);
         }
         else // Nitsche
@@ -355,12 +357,11 @@ int main(int argc, char *argv[])
         //linferr[r] = ev.max( f-s ) / ev.max(f);
 
         l2err[r]= math::sqrt( ev.integral( (u_ex - u_sol).sqNorm() * meas(G) ) ); // / ev.integral(f.sqNorm()*meas(G)) );
-        
         h1err[r]= l2err[r] +
             math::sqrt(ev.integral( ( igrad(u_ex) - igrad(u_sol,G) ).sqNorm() * meas(G) )); // /ev.integral( igrad(f).sqNorm()*meas(G) ) );
 
-        h2err[r]= h1err[r] +
-                 math::sqrt(ev.integral( ( ihess(u_ex) - ihess(u_sol,G) ).sqNorm() * meas(G) )); // /ev.integral( ihess(f).sqNorm()*meas(G) )
+        //h2err[r]= h1err[r] +
+        //         math::sqrt(ev.integral( ( ihess(u_ex) - ihess(u_sol,G) ).sqNorm() * meas(G) )); // /ev.integral( ihess(f).sqNorm()*meas(G) )
 
         if (!nitsche)
         {

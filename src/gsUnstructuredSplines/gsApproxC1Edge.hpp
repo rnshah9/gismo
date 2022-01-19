@@ -103,9 +103,11 @@ namespace gismo
             }
             map.finalize();
 
-            gsBoundaryConditions<> bc_empty;
-            bc_empty.addCondition(dir == 0 ? 1 : 3, condition_type::dirichlet, 0); // Doesn't matter which side
-            u.setup(bc_empty, dirichlet::homogeneous, 0, map);
+            u.setupMapper(map);
+
+            gsMatrix<T> & fixedDofs = const_cast<expr::gsFeSpace<T>&>(u).fixedPart();
+            fixedDofs.setZero( u.mapper().boundarySize(), 1 );
+
             A.initSystem();
             A.assemble(u * u.tr()); // The Matrix is the same for each bf
             solver.compute(A.matrix());
