@@ -173,9 +173,6 @@ void gsApproxGluingData<d, T>::setGlobalGluingData(index_t patchID, index_t dir)
     tilde_temp = bsp_gD.makeGeometry(sol);
     betaSContainer[dir] = dynamic_cast<gsBSpline<T> &> (*tilde_temp);
 
-    if (dir == 0)
-        gsWriteParaview(alphaSContainer[0],"alpha",200);
-
 } // setGlobalGluingData
 
 

@@ -72,9 +72,9 @@ void gsDirichletNeumannValuesL2Projection2(gsMultiPatch<> & mp, gsMultiBasis<> &
     A.initSystem();
     A.assembleBdr(bc.get("Dirichlet"), uu * uu.tr() * meas(G));
     A.assembleBdr(bc.get("Dirichlet"), uu * g_bdy * meas(G));
-    A.assembleBdr(bc.get("Strong Neumann"),
+    A.assembleBdr(bc.get("Neumann"),
                   lambda * (igrad(uu, G) * nv(G).normalized()) * (igrad(uu, G) * nv(G).normalized()).tr() * meas(G));
-    A.assembleBdr(bc.get("Strong Neumann"),
+    A.assembleBdr(bc.get("Neumann"),
                   lambda *  (igrad(uu, G) * nv(G).normalized()) * (g_bdy.tr() * nv(G).normalized()) * meas(G));
 
     gsSparseSolver<>::SimplicialLDLT solver;
@@ -97,12 +97,15 @@ int main(int argc, char *argv[])
     bool info = false;
     bool neumann = false;
     bool nitsche = false;
-    bool xml = false;
+
+    std::string xml;
+    bool output = false;
+
     std::string fn;
 
     index_t geometry = 1000;
 
-    gsCmdLine cmd("Tutorial on solving a Poisson problem.");
+    gsCmdLine cmd("Tutorial on solving a Biharmonic problem.");
     cmd.addInt( "s", "smoothing","Smoothing", smoothing );
     cmd.addInt( "p", "discreteDegree","Which discrete degree?", discreteDegree );
     cmd.addInt( "r", "discreteRegularity", "Number of discreteRegularity",  discreteRegularity );
@@ -116,69 +119,109 @@ int main(int argc, char *argv[])
     cmd.addSwitch("neumann", "Neumann", neumann);
     cmd.addSwitch("nitsche", "Nitsche", nitsche);
 
-    cmd.addSwitch("xml", "Read the option list from the xml file.", xml);
+    cmd.addString("x", "xml", "Use the information from the xml file", xml);
+    cmd.addSwitch("output", "Output in xml (for python)", output);
     try { cmd.getValues(argc,argv); } catch (int rv) { return rv; }
     //! [Parse command line]
 
-    if (discreteDegree - discreteRegularity > 1)
-        gsInfo << "ERROR, does not work for C^1: Choose C^2 \n";
-
-    //! [Read geometry]
-    std::string string_geo;
-    if (fn.empty())
-        string_geo = "planar/geometries/g" + util::to_string(geometry) + ".xml";
-    else
-        string_geo = fn;
-
+    //! [Initialize data]
     gsMultiPatch<> mp;
-    gsInfo << "Filedata: " << string_geo << "\n";
-    gsReadFile<>(string_geo, mp);
-    mp.clearTopology();
-    mp.computeTopology();
-
-    std::string string_file = "planar/biharmonic_pde/bvp1.xml";
-    gsFileData<> fd(string_file);
-    gsFunctionExpr<> f, laplace, ms;
-    fd.getId(0,f);
-    gsInfo<<"Source function "<< f << "\n";
-
-    fd.getId(1,ms); // Exact solution
-    gsInfo<<"Exact function "<< ms << "\n";
-
-    //! [Boundary condition]
     gsBoundaryConditions<> bc;
-    //if (geometry == 1000 || geometry == 1100)
-    if (mp.nPatches() == 2)
-        fd.getId(3, bc); // id=2: boundary conditions
-    else
+    gsFunctionExpr<> f, ms;
+    gsOptionList optionList;
+    //! [Initialize data]
+
+    //! [Read Argument inputs]
+    if (xml.empty()) {
+        //! [Read geometry]
+        std::string string_geo;
+        if (fn.empty())
+            string_geo = "planar/geometries/g" + util::to_string(geometry) + ".xml";
+        else
+            string_geo = fn;
+
+        gsInfo << "Filedata: " << string_geo << "\n";
+        gsReadFile<>(string_geo, mp);
+        mp.clearTopology();
+        mp.computeTopology();
+
+        gsFunctionExpr<>source("256*pi*pi*pi*pi*(4*cos(4*pi*x)*cos(4*pi*y) - cos(4*pi*x) - cos(4*pi*y))",2);
+        f.swap(source);
+        gsInfo << "Source function " << f << "\n";
+
+        gsFunctionExpr<> solution("(cos(4*pi*x) - 1) * (cos(4*pi*y) - 1)",2);
+        ms.swap(solution);
+        gsInfo << "Exact function " << ms << "\n";
+
+        //! [Boundary condition]
         for (gsMultiPatch<>::const_biterator bit = mp.bBegin(); bit != mp.bEnd(); ++bit)
         {
-            fd.getId(2,laplace); // Laplace for the bcs
+            // Laplace
+            gsFunctionExpr<> laplace ("-16*pi*pi*(2*cos(4*pi*x)*cos(4*pi*y) - cos(4*pi*x) - cos(4*pi*y))",2);
 
             // Neumann
             gsFunctionExpr<> sol1der("-4*pi*(cos(4*pi*y) - 1)*sin(4*pi*x)",
-                                                 "-4*pi*(cos(4*pi*x) - 1)*sin(4*pi*y)",2);
+                                     "-4*pi*(cos(4*pi*x) - 1)*sin(4*pi*y)", 2);
 
-            bc.addCondition(*bit, condition_type::dirichlet, &ms);
+            bc.addCondition(*bit, condition_type::dirichlet, ms);
             if (neumann)
-                bc.addCondition(*bit, condition_type::neumann, &sol1der);
+                bc.addCondition(*bit, condition_type::neumann, sol1der);
             else
-                bc.addCondition(*bit, condition_type::laplace, &laplace);
+                bc.addCondition(*bit, condition_type::laplace, laplace);
         }
-    bc.setGeoMap(mp);
-    //! [Boundary condition]
-    gsInfo<<"Boundary conditions:\n"<< bc <<"\n";
-    gsInfo<<"Finished\n";
+        bc.setGeoMap(mp);
+        gsInfo << "Boundary conditions:\n" << bc << "\n";
+        //! [Boundary condition]
 
-    gsOptionList optionList;
-    fd.getId(100, optionList); // id=100: assembler options
-    gsInfo << "OptionList: " << optionList << "\n";
-    if (xml)
-    {
-        discreteDegree = optionList.getInt("discreteDegree");
-        // [...]
+        optionList = cmd;
+        gsInfo << "OptionList: " << optionList << "\n";
+        gsInfo << "Finished\n";
     }
-    //! [Read input file]
+    //! [Read Argument inputs]
+
+    //! [Read XML file]
+    else
+    {
+        // id=0 Boundary
+        // id=1 Source function
+        // id=2 Optionlist
+        // id=3 Exact solution
+        // id=X Geometry (should be last!)
+        gsFileData<> fd(xml); // "planar/biharmonic_pde/bvp1.xml"
+
+        // Geometry
+        fd.getAnyFirst(mp);
+        mp.computeTopology();
+        gsInfo << "Multipatch " << mp << "\n";
+
+        // Functions
+        fd.getId(1, f); // Source solution
+        gsInfo << "Source function " << f << "\n";
+
+        fd.getId(3, ms); // Exact solution
+        gsInfo << "Exact function " << ms << "\n";
+
+        // Boundary condition
+        fd.getId(0, bc); // id=2: boundary conditions
+        bc.setGeoMap(mp);
+        gsInfo << "Boundary conditions:\n" << bc << "\n";
+
+        // Option list
+        fd.getId(2, optionList); // id=100: assembler options
+        gsInfo << "OptionList: " << optionList << "\n";
+    }
+    //! [Read XML file]
+
+    //! [Read option list]
+    discreteDegree = optionList.getInt("discreteDegree");
+    discreteRegularity = optionList.getInt("discreteRegularity");
+    numRefine = optionList.getInt("refinementLoop");
+
+    nitsche = optionList.getSwitch("nitsche");
+
+    plot = optionList.getSwitch("plot");
+    info = optionList.getSwitch("info");
+    //! [Read option list]
 
     //! [Refinement]
     gsMultiBasis<> dbasis(mp, false);//true: poly-splines (not NURBS)
@@ -367,8 +410,8 @@ int main(int argc, char *argv[])
         h1err[r]= l2err[r] +
             math::sqrt(ev.integral( ( igrad(u_ex) - igrad(u_sol,G) ).sqNorm() * meas(G) )); // /ev.integral( igrad(f).sqNorm()*meas(G) ) );
 
-        //h2err[r]= h1err[r] +
-        //         math::sqrt(ev.integral( ( ihess(u_ex) - ihess(u_sol,G) ).sqNorm() * meas(G) )); // /ev.integral( ihess(f).sqNorm()*meas(G) )
+        h2err[r]= h1err[r] +
+                 math::sqrt(ev.integral( ( ihess(u_ex) - ihess(u_sol,G) ).sqNorm() * meas(G) )); // /ev.integral( ihess(f).sqNorm()*meas(G) )
 
         if (!nitsche)
         {
@@ -461,12 +504,29 @@ int main(int argc, char *argv[])
                   "file containing the solution.\n";
     //! [Export visualization in ParaView]
 
-    //! [Export data to CSV]
-    std::string cmdName = "-g1000-p3-r2-l5";
-    gsCSVOutput<2, real_t> csvOutput(mp, dbasis, cmdName);
-    csvOutput.flags = GEOMETRY | MESH | ERROR;
-    csvOutput.saveCSVFile(cmdName);
-    //! [Export data to CSV]
+    //! [Export data to xml]
+    if (output)
+    {
+        std::string cmdName = "testtest";
+
+        gsMatrix<> error_collection(l2err.rows(), 4);
+        error_collection.col(0) = l2err;
+        error_collection.col(1) = h1err;
+        error_collection.col(2) = h2err;
+        error_collection.col(3) = IFaceErr;
+
+        gsFileData<> xml_out;
+        xml_out << error_collection;
+        // Add solution
+        // [...]
+        xml_out.save(cmdName);
+
+        gsFileData<> test(cmdName+".xml");
+        gsMatrix<> matrix_temp;
+        test.getId(0,matrix_temp);
+        gsInfo << "Matrix: " << matrix_temp << "\n";
+    }
+    //! [Export data to xml]
 
     return EXIT_SUCCESS;
 
