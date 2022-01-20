@@ -72,9 +72,9 @@ void gsDirichletNeumannValuesL2Projection2(gsMultiPatch<> & mp, gsMultiBasis<> &
     A.initSystem();
     A.assembleBdr(bc.get("Dirichlet"), uu * uu.tr() * meas(G));
     A.assembleBdr(bc.get("Dirichlet"), uu * g_bdy * meas(G));
-    A.assembleBdr(bc.get("Strong Neumann"),
+    A.assembleBdr(bc.get("Neumann"),
                   lambda * (igrad(uu, G) * nv(G).normalized()) * (igrad(uu, G) * nv(G).normalized()).tr() * meas(G));
-    A.assembleBdr(bc.get("Strong Neumann"),
+    A.assembleBdr(bc.get("Neumann"),
                   lambda *  (igrad(uu, G) * nv(G).normalized()) * (g_bdy.tr() * nv(G).normalized()) * meas(G));
 
     gsSparseSolver<>::SimplicialLDLT solver;
@@ -360,8 +360,8 @@ int main(int argc, char *argv[])
         h1err[r]= l2err[r] +
             math::sqrt(ev.integral( ( igrad(u_ex) - igrad(u_sol,G) ).sqNorm() * meas(G) )); // /ev.integral( igrad(f).sqNorm()*meas(G) ) );
 
-        //h2err[r]= h1err[r] +
-        //         math::sqrt(ev.integral( ( ihess(u_ex) - ihess(u_sol,G) ).sqNorm() * meas(G) )); // /ev.integral( ihess(f).sqNorm()*meas(G) )
+        h2err[r]= h1err[r] +
+                 math::sqrt(ev.integral( ( ihess(u_ex) - ihess(u_sol,G) ).sqNorm() * meas(G) )); // /ev.integral( ihess(f).sqNorm()*meas(G) )
 
         if (!nitsche)
         {
