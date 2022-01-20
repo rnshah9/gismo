@@ -24,6 +24,7 @@ sys.path.append(gismo_path)
 import pygismo as gs
 import numpy as np
 
+from python2latex.python2latex import MyDocument
 
 # [!Geometry]
 mp = gs.core.gsMultiPatch()
@@ -84,26 +85,6 @@ file.add(ms)    # id=3 Exact solution
 file.add(mp)    # id=X Geometry (should be last!)
 file.save("test_bvp.xml", False)
 print("Filedata saved: test_bvp.xml")
-
-## In G+Smo:
-# gsFileData<real_t> fd("test_bvp.xml");
-# gsMultiPatch<> mp_file;
-# gsBoundaryConditions<> bcInfo_file;
-# gsFunctionExpr<> sourceFunction_file;
-# gsOptionList opList_file;
-# gsFunctionExpr<> exactSol_file;
-#
-# fd.getId(0, bcInfo_file);
-# fd.getId(1, sourceFunction_file);
-# fd.getId(2, opList_file);
-# fd.getId(3, exactSol_file);
-# fd.getAnyFirst(mp_file);
-#
-# gsInfo << "mp_file: " << mp_file << "\n";
-# gsInfo << "bcInfo_file: " << bcInfo_file << "\n";
-# gsInfo << "sourceFunction_file: " << sourceFunction_file << "\n";
-# gsInfo << "opList_file: " << opList_file << "\n";
-# gsInfo << "exactSol_file: " << exactSol_file << "\n";
 # [!Save the data to the XML-file]
 
 # [!Run biharmonic2_example]
@@ -113,7 +94,15 @@ print("Filedata saved: test_bvp.xml")
 
 result = gs.io.gsFileData("testtest.xml")
 
-mp_in = np.ndarray((0,1))
-result.getId(0,mp_in)
-print(mp_in)
-print(result.read())
+M = np.zeros((2,4))
+#result.getId(0,mp_in)
+#print(mp_in)
+#print(result.read())
+
+M[0:] = np.array([1,2,3,4])
+M[1:] = np.array([2,3,4,5])
+x = np.array([0.5,0.25])
+
+doc = MyDocument()
+doc.create_error_plot(x,M)
+doc.generate_pdf("test", clean_tex=False)

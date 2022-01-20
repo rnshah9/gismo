@@ -520,6 +520,11 @@ int main(int argc, char *argv[])
         // Add solution
         // [...]
         xml_out.save(cmdName);
+
+        gsFileData<> test(cmdName+".xml");
+        gsMatrix<> matrix_temp;
+        test.getId(0,matrix_temp);
+        gsInfo << "Matrix: " << matrix_temp << "\n";
     }
     //! [Export data to xml]
 
