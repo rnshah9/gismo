@@ -15,6 +15,7 @@
 """
 
 import os, sys
+import subprocess
 
 gismo_path = os.path.join(os.path.dirname(__file__), "../build/lib")
 print("G+Smo path:", gismo_path, "(change if needed).")
@@ -66,16 +67,21 @@ for bdy in mp.boundaries():
 
 # [!Option list]
 opt = gs.io.gsOptionList()
-opt.addSwitch("plot", "Plotting the results.", True)
+opt.addSwitch("plot", "Plotting the results.", False)
+opt.addSwitch("info", "Plotting the results.", False)
+opt.addInt("refinementLoop", "Number of Uniform h-refinement loops.", 1)
+opt.addInt("discreteDegree", "Number of degree elevation steps to perform before solving (Degree 3 == 0).", 3)
+opt.addInt("discreteRegularity", "Number of degree elevation steps to perform before solving (Degree 3 == 0)", 2)
+opt.addSwitch("nitsche", "Compute the Nitsche's method.", False)
 # [!Option list]
 
 # [!Save the data to the XML-file]
 file = gs.io.gsFileData()
-file.add(bcs)  # id=0 Boundary
-file.add(f)  # id=1 Source function
-file.add(opt)  # id=2 Optionlist
-file.add(ms)  # id=3 Exact solution
-file.add(mp)  # id=4+#patches Geometry (should be last!)
+file.add(bcs)   # id=0 Boundary
+file.add(f)     # id=1 Source function
+file.add(opt)   # id=2 Optionlist
+file.add(ms)    # id=3 Exact solution
+file.add(mp)    # id=X Geometry (should be last!)
 file.save("test_bvp.xml", False)
 print("Filedata saved: test_bvp.xml")
 
@@ -99,3 +105,15 @@ print("Filedata saved: test_bvp.xml")
 # gsInfo << "opList_file: " << opList_file << "\n";
 # gsInfo << "exactSol_file: " << exactSol_file << "\n";
 # [!Save the data to the XML-file]
+
+# [!Run biharmonic2_example]
+#proc = subprocess.Popen(["../build/bin/biharmonic2_example", "--output", "-x", "test_bvp.xml"])
+#proc.wait()
+# [!Run biharmonic2_example]
+
+result = gs.io.gsFileData("testtest.xml")
+
+mp_in = np.ndarray((0,1))
+result.getId(0,mp_in)
+print(mp_in)
+print(result.read())

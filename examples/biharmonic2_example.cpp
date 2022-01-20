@@ -182,6 +182,11 @@ int main(int argc, char *argv[])
     //! [Read XML file]
     else
     {
+        // id=0 Boundary
+        // id=1 Source function
+        // id=2 Optionlist
+        // id=3 Exact solution
+        // id=X Geometry (should be last!)
         gsFileData<> fd(xml); // "planar/biharmonic_pde/bvp1.xml"
 
         // Geometry
@@ -190,19 +195,19 @@ int main(int argc, char *argv[])
         gsInfo << "Multipatch " << mp << "\n";
 
         // Functions
-        fd.getId(0, f); // Source solution
+        fd.getId(1, f); // Source solution
         gsInfo << "Source function " << f << "\n";
 
-        fd.getId(1, ms); // Exact solution
+        fd.getId(3, ms); // Exact solution
         gsInfo << "Exact function " << ms << "\n";
 
         // Boundary condition
-        fd.getId(3, bc); // id=2: boundary conditions
+        fd.getId(0, bc); // id=2: boundary conditions
         bc.setGeoMap(mp);
         gsInfo << "Boundary conditions:\n" << bc << "\n";
 
         // Option list
-        fd.getId(100, optionList); // id=100: assembler options
+        fd.getId(2, optionList); // id=100: assembler options
         gsInfo << "OptionList: " << optionList << "\n";
     }
     //! [Read XML file]
@@ -405,8 +410,8 @@ int main(int argc, char *argv[])
         h1err[r]= l2err[r] +
             math::sqrt(ev.integral( ( igrad(u_ex) - igrad(u_sol,G) ).sqNorm() * meas(G) )); // /ev.integral( igrad(f).sqNorm()*meas(G) ) );
 
-        //h2err[r]= h1err[r] +
-        //         math::sqrt(ev.integral( ( ihess(u_ex) - ihess(u_sol,G) ).sqNorm() * meas(G) )); // /ev.integral( ihess(f).sqNorm()*meas(G) )
+        h2err[r]= h1err[r] +
+                 math::sqrt(ev.integral( ( ihess(u_ex) - ihess(u_sol,G) ).sqNorm() * meas(G) )); // /ev.integral( ihess(f).sqNorm()*meas(G) )
 
         if (!nitsche)
         {
