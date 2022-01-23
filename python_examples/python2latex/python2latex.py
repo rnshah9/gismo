@@ -1,83 +1,44 @@
-from pylatex import Document, NoEscape, Tabular, TikZ, TikZOptions, TikZNode,  TikZCoordinate, Command, Axis, Plot
+from pylatex import Document, NoEscape, Figure, SubFigure, Package
 
-import numpy as np
+import errno, glob, os
 
 class MyDocument(Document):
     def __init__(self):
-        super().__init__(documentclass='standalone')
+        super().__init__(documentclass='article')
 
-        self.deg = 3
+        self.preamble.append(Package("tikz"))
+        self.preamble.append(Package("pgfplots"))
+        self.preamble.append(NoEscape(r'\usepgfplotslibrary{external}'))
+        self.preamble.append(NoEscape(r'\tikzexternalize'))
 
-    # def create_error_table(self, x, result, result_firstRow):
-    #
-    #     l2error_col = 2
-    #     h1error_col = 4
-    #     h2error_col = 6
-    #
-    #     coord = []
-    #     coord2 = []
-    #     coord3 = []
-    #     for i, j in zip(x, result[:, l2error_col]):
-    #         coord.append([i, j])
-    #     for i, j in zip(x, result[:, h1error_col]):
-    #         coord2.append([i, j])
-    #     for i, j in zip(x, result[:, h2error_col]):
-    #         coord3.append([i, j])
-    #
-    #     with self.create(Tabular('c|c||c|c||c|c||c|c')) as tabular:
-    #         self.append(NoEscape(r'\centering'))
-    #         tabular.add_row((result_firstRow))
-    #         tabular.add_hline()
-    #         for xx, y0, y1, r1, y2, r2, y3, r3 in zip(x, result[:, 1], result[:, l2error_col],
-    #                                                   result[:, l2error_col + 1],
-    #                                                   result[:, h1error_col], result[:, h1error_col + 1],
-    #                                                   result[:, h2error_col], result[:, h2error_col + 1]):
-    #             tabular.add_row((xx, int(y0), y1, r1, y2, r2, y3, r3))
-    #             tabular.add_hline()
+    def addTikzFigure(self, tikz_list, row=1):
+        width = r'' + str(1/row) + '\\textwidth'
+        with self.create(Figure(position='h!')) as fig:
+            self.append(NoEscape(r"\centering"))
+            for idx, tikz in enumerate(tikz_list):
+                with self.create(SubFigure(
+                        position='b',
+                        width=NoEscape(width))) as subfig:
+                    self.append(NoEscape(r"\centering"))
+                    self.append(NoEscape(r'\input{'+tikz+'.tikz}'))
+                    subfig.add_caption('Kitten on the left')
+                if idx%row == row-1:
+                    self.append(NoEscape(r"\\"))
+            fig.add_caption("Two kittens")
 
-    def create_error_plot(self, x, result):
+    def clean_extensions(self):
 
-        l2error_col = 0
-        h1error_col = 1
-        h2error_col = 2
+        extensions = ['aux', 'log', 'out', 'fls',
+              'fdb_latexmk', 'md5', 'dpth']
 
-        coord = []
-        coord2 = []
-        coord3 = []
-        if len(result) > 0:
-            for i, j in zip(x, result[:, l2error_col]):
-                coord.append([i, j])
-            for i, j in zip(x, result[:, h1error_col]):
-                coord2.append([i, j])
-            for i, j in zip(x, result[:, h2error_col]):
-                coord3.append([i, j])
-
-        # For shifting the rates
-        y_rate = np.exp(np.log(coord[-1][1]) - (int(self.deg)+1)*np.log(x[-1]))
-        y_rate2 = np.exp(np.log(coord2[-1][1]) - int(self.deg)*np.log(x[-1]))
-        y_rate3 = np.exp(np.log(coord3[-1][1]) - (int(self.deg)-1)*np.log(x[-1]))
-
-        # add our sample drawings
-        opt_plot = {'mark=diamond*', 'color=green', 'dashed','line width=1pt'}
-        opt_plot2 = {'mark=square*', 'color=blue', 'dashed','line width=1pt'}
-        opt_plot3 = {'mark=triangle*', 'color=red', 'dashed','line width=1pt'}
-
-        opt_axis = {'xmode = log', 'ymode = log', 'height = 6cm', 'legend pos = south east','mark options={solid}',
-                    'legend columns=3', 'transpose legend', 'legend style={/tikz/every even column/.append style={column sep=0.5cm}}'}
-        opt_axis = TikZOptions(opt_axis, width=NoEscape(r'1\textwidth'))
-
-        with self.create(TikZ()) as tikz:
-            with self.create(Axis(options=opt_axis)) as axis:
-                curve = Plot(options=opt_plot, coordinates=coord)
-                axis.append(curve)
-
-                curve = Plot(options=opt_plot2, coordinates=coord2)
-                axis.append(curve)
-
-                curve = Plot(options=opt_plot3, coordinates=coord3)
-                axis.append(curve)
-
-
+        for ext in extensions:
+            for f in glob.glob("test-figure*"+ '.' + ext):
+                try:
+                    os.remove(f)
+                except (OSError, IOError) as e:
+                    # Use FileNotFoundError when python 2 is dropped
+                    if e.errno != errno.ENOENT:
+                        raise
 
 
 
