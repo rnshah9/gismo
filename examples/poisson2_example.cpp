@@ -39,6 +39,15 @@ int main(int argc, char *argv[])
 
     //! [Read input file]
 
+
+    char const * str = "germans";
+    gsWrite(str,"test");
+
+    // index_t index = 1;
+    // gsWrite(index ,"test");
+    return 0;
+
+
     gsFileData<> fd(fn);
     gsInfo << "Loaded file "<< fd.lastPath() <<"\n";
 
