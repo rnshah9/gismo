@@ -25,53 +25,35 @@ public:
 
     /// Constructor using a filename.
     gsXmlCollection(String const & fn)
-    : mfn(fn), counter(0)
+    : m_fn(fn)
     {
         // mfile <<"<?xml version=\"1.0\"?>\n";
         // mfile <<"<VTKFile type=\"Collection\" version=\"0.1\">";
         // mfile <<"<Collection>\n";
+
     }
 
     /// Adds a part in the collection, with complete filename (including extension) \a fn
-    void addPart(String const & fn)
+    void addFile(String const & fn)
     {
         // GISMO_ASSERT(fn.find_last_of(".") != String::npos, "File without extension");
         // GISMO_ASSERT(counter!=-1, "Error: collection has been already saved." );
         // mfile << "<DataSet part=\""<<counter++<<"\" file=\""<<fn<<"\"/>\n";
+        m_fd.addString(fn);
     }
 
-    /// Adds a part in the collection, with filename \a fn with extension \a ext appended
-    void addPart(String const & fn, String const & ext)
+    /// Adds a part in the collection, with complete filename (including extension) \a fn
+    void addFile(String const & fn, String const & label)
     {
+        // GISMO_ASSERT(fn.find_last_of(".") != String::npos, "File without extension");
         // GISMO_ASSERT(counter!=-1, "Error: collection has been already saved." );
-        // mfile << "<DataSet part=\""<<counter++<<"\" file=\""<<fn<<ext<<"\"/>\n";
-    }
-
-    /// Adds a part in the collection, with filename \a fni and extension \a ext appended
-    void addPart(String const & fn, int i, String const & ext)
-    {
-        // GISMO_ASSERT(counter!=-1, "Error: collection has been already saved." );
-        // mfile << "<DataSet part=\""<<i<<"\" file=\""<<fn<<i<<ext<<"\"/>\n";
-    }
-
-    // to do: make time collections as well
-    // ! i is not included in the filename, must be in included fn !
-    void addTimestep(String const & fn, int tstep, String const & ext)
-    {
-        // mfile << "<DataSet timestep=\""<<tstep<<"\" file=\""<<fn<<ext<<"\"/>\n";
-    }
-
-    void addTimestep(String const & fn, int part, int tstep, String const & ext)
-    {
-    //     mfile << "<DataSet part=\""
-    //           <<part<<"\" timestep=\""
-    //           <<tstep<<"\" file=\""
-    //           <<fn<<part<<ext<<"\"/>\n";//<<"_"
+        // mfile << "<DataSet part=\""<<counter++<<"\" file=\""<<fn<<"\"/>\n";
+        m_fd.addString(fn, label);
     }
 
     /// Finalizes the collection by closing the XML tags, always call
     /// this function (once) when you finish adding files
-    void save(String const & fn)
+    void save()
     {
         // GISMO_ASSERT(counter!=-1, "Error: gsParaviewCollection::save() already called." );
         // mfile <<"</Collection>\n";
@@ -84,6 +66,7 @@ public:
         // f.close();
         // mfile.str("");
         // counter = -1;
+        m_fd.save(m_fn.str());
     }
 
     /// Finalizes the collection by closing the XML tags, always call
@@ -93,21 +76,32 @@ public:
 
     }
 
+    /// Get Functions
+public:
+
+    template<class Object>
+    inline void getId( const int & id, Object& result)  const
+    {
+        gsFileData<> file(m_fd.getString(id));
+        file.getFirst(result);
+    }
+
+    template<class Object>
+    inline void getLabel( const std::string & label, Object& result)  const
+    {
+        //gsFileData<> file(m_fd.getString(id));
+        //gsInfo << m_fd.getString(id) << "\n";
+        //file.getFirst(result);
+        gsFileData<> file(m_fd.getString(label));
+        file.getFirst(result);
+    }
 
 
 private:
     /// Pointer to char stream
-    std::stringstream mfile;
+    std::stringstream m_fn;
+    gsFileData<> m_fd;
 
-    /// File name
-    String mfn;
-
-    /// Counter for the number of parts (files) added in the collection
-    int counter;
-
-private:
-    // Construction without a filename is not allowed
-    gsParaviewCollection();
 };
 
 }// end namespace gismo
