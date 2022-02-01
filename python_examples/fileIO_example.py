@@ -146,4 +146,5 @@ print("Filedata saved: test_mspline.xml")
 # [!Save the data to the XML-file]
 
 
+"""" Third example: save xml collection """
 

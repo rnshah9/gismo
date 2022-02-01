@@ -69,7 +69,7 @@ void gsApproxC1Spline<d,T>::init()
         // Construct special space for r = p - 1:
         // The first and the last knot (not 0,1) are repeated +1, e.g.
         // deg 3, r = 2: |||| || | [...] | || ||||
-        index_t m,p;
+        /*index_t m,p;
         for (index_t uv = 0; uv < 2; uv++)
         {
             p = basis_inner.degree(uv);
@@ -83,7 +83,7 @@ void gsApproxC1Spline<d,T>::init()
                 if (knot_u != 0.5 && knot_u != 1)
                     basis_inner.insertKnot(1-knot_u,uv,1);
             }
-        }
+        }*/
         index_t dim_u = basis_inner.component(0).size();
         index_t dim_v = basis_inner.component(1).size();
 
