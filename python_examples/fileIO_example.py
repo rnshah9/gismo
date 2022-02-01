@@ -140,7 +140,7 @@ mat = sparse.csr_matrix((data, (row, col)), shape=(32, 24))
 # [!Save the data to the XML-file]
 file2 = gs.io.gsFileData()
 file2.add(mb)
-file2.add(mat)
+file2.addSparse(mat)
 file2.save("test_mspline.xml", False)
 print("Filedata saved: test_mspline.xml")
 # [!Save the data to the XML-file]
@@ -159,15 +159,14 @@ file3.getId(1,mp2)
 file3.getLabel("label3",mp2)
 print(mp2.nPatches())
 
-mat2 = np.array([ 0,1 ])
-#file = gs.io.gsFileData()
-#file.add(mat2)
-#file.save("test_mat.xml", False)
+mat2 = np.array([[1, 2, 3], [4, 5, 6]])
+file = gs.io.gsFileData()
+file.addMatrix(mat2)
+file.save("test_mat.xml", False)
 
 file3.addFile("matrix","test_mat.xml")
 file3.save()
 
-mat3 = np.empty(2)
-file3.getMatrix("matrix",mat3)
-print(mat3,mat2)
+mat4 = file3.getMatrix("matrix")
+print(mat4, mat2)
 

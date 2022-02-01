@@ -12,7 +12,11 @@
 */
 
 #pragma once
-#include <gsCore/gsTemplateTools.h>
+
+#include <gismo.h>
+
+#include <iostream>
+#include <string>
 
 #include <gsIO/gsXml.h>
 #include <gsIO/gsFileData.h>
@@ -98,13 +102,14 @@ public:
         file.getFirst(result);
     }
 
-    void getMatrix( const std::string & label, gsMatrix<double>& result)  const
+    gsMatrix<real_t> getMatrix( const std::string & label)  const
     {
-        gsMatrix<> mat;
-        gsFileData<> file(m_fd.getString(label));
+        gsMatrix<real_t> result;
+        gsFileData<real_t> file(m_fd.getString(label));
         gsInfo << file.contents() << "\n";
         file.getFirst(result);
-
+        gsInfo << result << "\n";
+        return result;
     }
 
 

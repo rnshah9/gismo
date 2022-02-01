@@ -1,5 +1,3 @@
-#include <gsCore/gsTemplateTools.h>
-
 #include <gsIO/gsXmlCollection.h>
 #include <gsIO/gsXmlCollection.hpp>
 
