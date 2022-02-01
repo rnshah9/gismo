@@ -13,6 +13,7 @@
 
 //! [Include namespace]
 #include <gismo.h>
+#include <gsIO/gsXmlCollection.h>
 
 using namespace gismo;
 //! [Include namespace]
@@ -38,7 +39,6 @@ int main(int argc, char *argv[])
     //! [Parse command line]
 
     //! [Read input file]
-
     gsFileData<> fd(fn);
     gsInfo << "Loaded file "<< fd.lastPath() <<"\n";
 
@@ -60,6 +60,39 @@ int main(int argc, char *argv[])
     gsOptionList Aopt;
     fd.getId(4, Aopt); // id=4: assembler options
 
+
+/*    const std::string str = "germans";
+    gsFileData<> file;
+    file.addString(str);
+    file.addString(str);
+    file.save("test_string");
+
+    gsFileData<> file_input("test_string.xml");
+    gsInfo << "String: " << file_input.getString() << "\n";
+    gsInfo << "String: " << file_input.getString(2) << "\n";
+    gsInfo << "String: " << file_input.getString(3) << "\n";*/
+
+    gsFileData<> file;
+    file << mp;
+    file.save("geometry.xml");
+
+    gsXmlCollection xmlCollection("xmlCollection.xml");
+    xmlCollection.addFile("geometry.xml");
+    xmlCollection.addFile("geometry.xml", "GeometryLabel");
+    xmlCollection.save();
+
+    gsMultiPatch<> mp_read;
+    xmlCollection.getId(0,mp_read);
+
+    gsInfo << mp_read << "\n";
+
+    gsMultiPatch<> mp_read_with_label;
+    xmlCollection.getLabel("GeometryLabel",mp_read_with_label);
+
+    gsInfo << mp_read_with_label << "\n";
+    // index_t index = 1;
+    // gsWrite(index ,"test");
+    return 0;
     //! [Read input file]
 
     //! [Refinement]
