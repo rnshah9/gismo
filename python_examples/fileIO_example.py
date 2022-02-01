@@ -147,4 +147,27 @@ print("Filedata saved: test_mspline.xml")
 
 
 """" Third example: save xml collection """
+file3 = gs.io.gsXmlCollection("test_xmlCollection.xml")
+file3.addFile("planar/square_with_disk.xml")
+file3.addFile("geometry","planar/square_with_disk.xml")
+file3.addFile("label3","planar/square_with_disk.xml")
+file3.save()
+print("Filedata saved: test_xmlCollection.xml")
+
+mp2 = gs.core.gsMultiPatch()
+file3.getId(1,mp2)
+file3.getLabel("label3",mp2)
+print(mp2.nPatches())
+
+mat2 = np.array([ 0,1 ])
+#file = gs.io.gsFileData()
+#file.add(mat2)
+#file.save("test_mat.xml", False)
+
+file3.addFile("matrix","test_mat.xml")
+file3.save()
+
+mat3 = np.empty(2)
+file3.getMatrix("matrix",mat3)
+print(mat3,mat2)
 

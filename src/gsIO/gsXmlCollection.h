@@ -12,8 +12,10 @@
 */
 
 #pragma once
+#include <gsCore/gsTemplateTools.h>
 
 #include <gsIO/gsXml.h>
+#include <gsIO/gsFileData.h>
 
 namespace gismo {
 
@@ -24,7 +26,7 @@ public:
 public:
 
     /// Constructor using a filename.
-    gsXmlCollection(String const & fn)
+    gsXmlCollection(String const& fn)
     : m_fn(fn)
     {
         // mfile <<"<?xml version=\"1.0\"?>\n";
@@ -43,7 +45,7 @@ public:
     }
 
     /// Adds a part in the collection, with complete filename (including extension) \a fn
-    void addFile(String const & fn, String const & label)
+    void addFile(String const & label, String const & fn)
     {
         // GISMO_ASSERT(fn.find_last_of(".") != String::npos, "File without extension");
         // GISMO_ASSERT(counter!=-1, "Error: collection has been already saved." );
@@ -96,6 +98,15 @@ public:
         file.getFirst(result);
     }
 
+    void getMatrix( const std::string & label, gsMatrix<double>& result)  const
+    {
+        gsMatrix<> mat;
+        gsFileData<> file(m_fd.getString(label));
+        gsInfo << file.contents() << "\n";
+        file.getFirst(result);
+
+    }
+
 
 private:
     /// Pointer to char stream
@@ -103,6 +114,15 @@ private:
     gsFileData<> m_fd;
 
 };
+
+#ifdef GISMO_BUILD_PYBIND11
+
+  /**
+   * @brief Initializes the Python wrapper for the class: gsXmlCollection
+   */
+  void pybind11_init_gsXmlCollection(pybind11::module &m);
+
+#endif // GISMO_BUILD_PYBIND11
 
 }// end namespace gismo
 

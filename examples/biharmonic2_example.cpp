@@ -286,7 +286,7 @@ int main(int argc, char *argv[])
     gsSparseSolver<>::SimplicialLDLT solver;
 
     gsVector<> l2err(numRefine+1), h1err(numRefine+1), h2err(numRefine+1),
-    IFaceErr(numRefine+1);
+    IFaceErr(numRefine+1), meshsize(numRefine+1);
     gsInfo<< "(dot1=approxC1construction, dot2=assembled, dot3=solved, dot4=got_error)\n"
         "\nDoFs: ";
     double setup_time(0), ma_time(0), slv_time(0), err_time(0);
@@ -294,6 +294,7 @@ int main(int argc, char *argv[])
     for (int r=0; r<=numRefine; ++r)
     {
         dbasis.uniformRefine(1,discreteDegree -discreteRegularity);
+        meshsize[r] = dbasis.basis(0).getMinCellLength();
 
         if (!nitsche)
             approxC1.update(bb2);
@@ -460,6 +461,8 @@ int main(int argc, char *argv[])
     gsInfo<<"   Solving: "<< slv_time   <<"\n";
     gsInfo<<"     Norms: "<< err_time   <<"\n";
 
+    gsInfo<< "\nMesh-size: " << meshsize.transpose() << "\n";
+
     //! [Error and convergence rates]
     gsInfo<< "\nL2 error: "<<std::scientific<<std::setprecision(3)<<l2err.transpose()<<"\n";
     gsInfo<< "H1 error: "<<std::scientific<<h1err.transpose()<<"\n";
@@ -468,7 +471,7 @@ int main(int argc, char *argv[])
 
     if (!last && numRefine>0)
     {
-        gsInfo<< "\nEoC (L2): " << std::fixed<<std::setprecision(2)
+        gsInfo<< "EoC (L2): " << std::fixed<<std::setprecision(2)
               <<  ( l2err.head(numRefine).array()  /
                    l2err.tail(numRefine).array() ).log().transpose() / std::log(2.0)
                    <<"\n";

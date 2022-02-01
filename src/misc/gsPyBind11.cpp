@@ -15,6 +15,7 @@
 #include <gsCore/gsExport.h>
 
 #include <gismo.h>
+#include <gsIO/gsXmlCollection.h>
 
 #ifdef GISMO_KLSHELL
 #include <gsKLShell/gsKLShell.h>
@@ -86,7 +87,8 @@ PYBIND11_MODULE(pygismo, m) {
 
   gismo::pybind11_init_gsCmdLine( io );
   gismo::pybind11_init_gsFileData( io );
-  gismo::pybind11_init_gsOptionList (io );  
+  gismo::pybind11_init_gsOptionList (io );
+  gismo::pybind11_init_gsXmlCollection (io );
 
   py::module matrix = m.def_submodule("matrix");
 
