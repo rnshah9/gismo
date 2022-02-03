@@ -7,13 +7,12 @@ class MyTikz(Document):
     def __init__(self):
         super().__init__(documentclass='standalone')
         self.opt = {}
-        self.opt_plot = [{'mark': 'diamond*', 'color': 'green', '' : 'dashed', 'line width': '1pt'},
+        self.opt_plot = [{'mark': 'diamond*', 'color': 'green', '': 'dashed', 'line width': '1pt'},
                          {'mark': 'square*', 'color': 'blue', '': 'dashed', 'line width': '1pt'},
                          {'mark': 'triangle*', 'color': 'red', '': 'dashed', 'line width': '1pt'},
                          {'mark': 'pentagon*', 'color': 'yellow', '': 'dashed', 'line width': '1pt'},
                          {'mark': 'halfcircle*', 'color': 'brown', '': 'dashed', 'line width': '1pt'}]
         self.opt_plot = self.opt_plot * 10
-
 
     def setOptions(self, options):
         self.opt = options
@@ -70,17 +69,17 @@ class MyTikz(Document):
 
     def create_error_plot(self, x, *results):
 
-        points_list = [] # Number of matrices
+        points_list = []  # Number of matrices
         for res in results:
             points = []
             for col in range(res.shape[1]):
-                points_temp = [] # Number of cols
+                points_temp = []  # Number of cols
                 for i, j in zip(x, res[:, col]):
                     points_temp.append([i, j])
                 points.append(points_temp)
             points_list.append(points)
 
-        opt_axis = TikZOptions(self.opt, width=NoEscape(r'1\textwidth'))
+        opt_axis = TikZOptions(**self.opt, width=NoEscape(r'1\textwidth'))
         with self.create(TikZ()) as tikz:
             with self.create(Axis(options=opt_axis)) as axis:
                 for points in points_list:

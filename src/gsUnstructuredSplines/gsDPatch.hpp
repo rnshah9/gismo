@@ -827,7 +827,7 @@ namespace gismo
         T phi = 2*PI / valence;
         std::complex<T> I(1,1);
         T beta = 0.4;
-        T psi = std::arg( (1.0+I*beta*math::sin(phi) ) * math::exp( -I*phi / 2. ) );
+        T psi = std::arg( (T(1.0)+I*beta*math::sin(phi) ) * math::exp( -I*phi / T(2.0) ) );
 
         // for (index_t j=0; j!=valence; j++)
         // {

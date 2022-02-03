@@ -127,7 +127,7 @@ public:
             // Elements used for numerical integration
             gsMultiBasis<T> vertexSpace(auxPatchSingle[0].getBasisRotated().piece(m_vertexIndices[i] + 4));
             A.setIntegrationElements(vertexSpace);
-            gsExprEvaluator<> ev(A);
+            gsExprEvaluator<T> ev(A);
 
             // Set the discretization space
             auto u = A.getSpace(vertexSpace);
@@ -155,7 +155,7 @@ public:
             solver.compute(A.matrix());
 
             // Create Basis functions
-            gsMultiPatch<> result_1;
+            gsMultiPatch<T> result_1;
             for (index_t bfID = 0; bfID < 6; bfID++)
             {
                 A.initVector();

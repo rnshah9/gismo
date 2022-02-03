@@ -503,9 +503,9 @@ private:
                                     {
                                         // Symmetric treatment of eliminated BCs
                                         // GISMO_ASSERT(1==m_rhs.cols(), "-");
-#                                       pragma omp atomic
-                                        m_rhs.at(ii) -= localMat(rls+i,cls+j) *
-                                            fixedDofs.at(colMap.global_to_bindex(jj));
+#                                       pragma omp critical (acc_m_rhs)
+                                        m_rhs.row(ii) -= localMat(rls+i,cls+j) *
+                                            fixedDofs.row(colMap.global_to_bindex(jj));
                                     }
                                 }
                             }

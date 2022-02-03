@@ -1,0 +1,31 @@
+\begin{tikzpicture}%
+\begin{axis}[xmode=log,ymode=log,height=6cm,mark options={solid},width=1\textwidth]%
+\addplot[mark=diamond*,color=red,=dashed,line width=1pt] coordinates {%
+(0.25,0.3486053384554850254)%
+(0.125,0.016908142079361608567)%
+(0.0625,0.00012896503564237019545)%
+(0.03125,2.5437803685492149353e-06)%
+(0.015625,6.943200714794925457e-08)%
+};%
+%
+%
+\addplot[mark=square*,color=green,=dashed,line width=1pt] coordinates {%
+(0.25,6.1290312858168132237)%
+(0.125,0.47877818835559471378)%
+(0.0625,0.010842946851555620297)%
+(0.03125,0.00048794712494890579105)%
+(0.015625,2.7704016525322320511e-05)%
+};%
+%
+%
+\addplot[mark=triangle*,color=blue,=dashed,line width=1pt] coordinates {%
+(0.25,114.71006336913569612)%
+(0.125,17.761212912630330862)%
+(0.0625,1.0272447594630029766)%
+(0.03125,0.09746446765959038139)%
+(0.015625,0.011256303130663839612)%
+};%
+%
+%
+\end{axis}%
+\end{tikzpicture}%

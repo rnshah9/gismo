@@ -51,8 +51,6 @@ public:
     /// Unique pointer for gsAlpha
     typedef memory::unique_ptr< gsAlpha > uPtr;
 
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
     gsAlpha(gsGeometry<T> & geo, index_t uv) :
             _geo(geo), m_uv(uv), _alpha_piece(nullptr)
     {
@@ -72,7 +70,7 @@ public:
     const gsFunction<T> & piece(const index_t k) const
     {
         //delete _alpha_piece;
-        _alpha_piece = new gsAlpha(_geo, m_uv);
+        _alpha_piece = new gsAlpha(*this);
         return *_alpha_piece;
     }
 
@@ -114,8 +112,6 @@ public:
     /// Unique pointer for gsBeta
     typedef memory::unique_ptr< gsBeta > uPtr;
 
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
     gsBeta(gsGeometry<T> & geo, index_t uv) :
             _geo(geo), m_uv(uv), _beta_piece(nullptr)
     {
@@ -135,7 +131,7 @@ public:
     const gsFunction<T> & piece(const index_t k) const
     {
         //delete _beta_piece;
-        _beta_piece = new gsBeta(_geo, m_uv);
+        _beta_piece = new gsBeta(*this);
         return *_beta_piece;
     }
 
@@ -155,7 +151,7 @@ public:
         {
             _geo.jacobian_into(uv.col(i),ev);
             D0  = ev.col(m_uv);
-            real_t D1 = 1/ D0.norm();
+            real_t D1 = T(1.0)/ D0.norm();
             uv(0,i) = - gamma * D1 * D1 * ev.col(1).transpose() * ev.col(0);
         }
         result = uv.row(0);
@@ -170,10 +166,10 @@ class gsTraceBasis : public gismo::gsFunction<T>
 protected:
     gsGeometry<T> & _geo;
 
-    gsBSpline<T> & _m_basis_beta;
-    gsBSplineBasis<T> & m_basis_plus;
+    gsBSpline<T>  _m_basis_beta;
+    gsBSplineBasis<T>  m_basis_plus;
 
-    gsBasis<T> & m_basis;
+    gsBasis<T> &   m_basis;
 
     mutable gsMapData<T> _tmp;
 
@@ -188,11 +184,9 @@ public:
     /// Unique pointer for gsTraceBasis
     typedef memory::unique_ptr< gsTraceBasis > uPtr;
 
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
     gsTraceBasis(gsGeometry<T> & geo,
-                 gsBSpline<T> & basis_beta,
-                 gsBSplineBasis<T> & basis_plus,
+                 gsBSpline<T> basis_beta,
+                 gsBSplineBasis<T> basis_plus,
                  gsBasis<T> & basis,
                  bool isboundary,
                  const index_t bfID,
@@ -218,8 +212,7 @@ public:
     const gsFunction<T> & piece(const index_t k) const
     {
         //delete _traceBasis_piece;
-        _traceBasis_piece = new gsTraceBasis(_geo, _m_basis_beta, m_basis_plus, m_basis,
-                                             m_isboundary, m_bfID, m_uv);
+        _traceBasis_piece = new gsTraceBasis(*this);
         return *_traceBasis_piece;
     }
 
@@ -261,8 +254,8 @@ class gsNormalDerivBasis : public gismo::gsFunction<T>
 protected:
     gsGeometry<T> & _geo;
 
-    gsBSpline<T> & m_basis_alpha;
-    gsBSplineBasis<T> & m_basis_minus;
+    gsBSpline<T> m_basis_alpha;
+    gsBSplineBasis<T> m_basis_minus;
 
     gsBasis<T> & m_basis;
 
@@ -279,11 +272,9 @@ public:
     /// Unique pointer for gsNormalDerivBasis
     typedef memory::unique_ptr< gsNormalDerivBasis > uPtr;
 
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
     gsNormalDerivBasis(gsGeometry<T> & geo,
-                 gsBSpline<T> & basis_alpha,
-                 gsBSplineBasis<T> & basis_minus,
+                 gsBSpline<T> basis_alpha,
+                 gsBSplineBasis<T> basis_minus,
                  gsBasis<T> & basis,
                  bool isboundary,
                  const index_t bfID,
@@ -308,8 +299,7 @@ public:
     const gsFunction<T> & piece(const index_t k) const
     {
         //delete _normalDerivBasis_piece;
-        _normalDerivBasis_piece = new gsNormalDerivBasis(_geo, m_basis_alpha, m_basis_minus, m_basis,
-                                             m_isboundary, m_bfID, m_uv);
+        _normalDerivBasis_piece = new gsNormalDerivBasis(*this);
         return *_normalDerivBasis_piece;
     }
 
@@ -336,9 +326,9 @@ public:
         m_basis_minus.evalSingle_into(m_bfID,u.row(m_uv),N_j_minus); // v
 
         if (!m_isboundary)
-            result = (m_uv == 0 ? -1 : 1) * alpha.cwiseProduct(N_j_minus.cwiseProduct(N_1)) * tau_1 / p;
+            result = (m_uv == 0 ? T(-1.0) : T(1.0)) * alpha.cwiseProduct(N_j_minus.cwiseProduct(N_1)) * tau_1 / p;
         else
-            result = (m_uv == 0 ? -1 : 1) * alpha.cwiseProduct(N_j_minus.cwiseProduct(N_1));
+            result = (m_uv == 0 ? T(-1.0) : T(1.0)) * alpha.cwiseProduct(N_j_minus.cwiseProduct(N_1));
     }
 
 };
@@ -349,17 +339,17 @@ class gsVertexBasis : public gismo::gsFunction<T>
 {
 
 protected:
-    const gsGeometry<T>    & m_geo;
+    const gsGeometry<T> &   m_geo;
     gsBasis<T> & m_basis;
 
-    std::vector<gsBSpline<T>>            & m_alpha;
-    std::vector<gsBSpline<T>>            & m_beta;
+    std::vector<gsBSpline<T>>            m_alpha;
+    std::vector<gsBSpline<T>>            m_beta;
 
-    std::vector<gsBSplineBasis<T>>       & m_basis_plus;
-    std::vector<gsBSplineBasis<T>>       & m_basis_minus;
+    std::vector<gsBSplineBasis<T>>       m_basis_plus;
+    std::vector<gsBSplineBasis<T>>       m_basis_minus;
 
-    const real_t & m_sigma;
-    const std::vector<bool> & m_kindOfEdge;
+    const real_t m_sigma;
+    const std::vector<bool> m_kindOfEdge;
 
     const index_t m_bfID;
 
@@ -372,34 +362,20 @@ public:
     /// Unique pointer for gsVertexBasis
     typedef memory::unique_ptr< gsVertexBasis > uPtr;
 
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
-    gsVertexBasis(const gsGeometry<T>    & geo,
+    gsVertexBasis(const gsGeometry<T> &   geo,
                   gsBasis<T> & basis,
-                  std::vector<gsBSpline<T>>& alpha,
-                  std::vector<gsBSpline<T>>& beta,
-                  std::vector<gsBSplineBasis<T>>& basis_plus,
-                  std::vector<gsBSplineBasis<T>>& basis_minus,
-                  const real_t & sigma,
-                  const std::vector<bool> & kindOfEdge,
+                  std::vector<gsBSpline<T>> alpha,
+                  std::vector<gsBSpline<T>> beta,
+                  std::vector<gsBSplineBasis<T>> basis_plus,
+                  std::vector<gsBSplineBasis<T>> basis_minus,
+                  const real_t sigma,
+                  const std::vector<bool> kindOfEdge,
                   const index_t bfID
             ) : m_geo(geo), m_basis(basis), m_alpha(alpha), m_beta(beta), m_basis_plus(basis_plus), m_basis_minus(basis_minus),
             m_sigma(sigma), m_kindOfEdge(kindOfEdge), m_bfID(bfID),
             _vertexBasis_piece(nullptr)
     {
-        //_tmp.flags = NEED_JACOBIAN;
-/*
-        m_basis_plus.clear(); m_basis_minus.clear();
-        for (index_t i = 0; i < m_basis.domainDim(); i++)
-        {
-            gsBSplineBasis<T> basis1, basis2;
-            createPlusSpace(geo, basis, i, basis1);
-            createMinusSpace(geo, basis, i, basis2);
 
-            m_basis_plus.push_back(basis1);
-            m_basis_minus.push_back(basis2);
-        }
-*/
     }
 
     ~gsVertexBasis() { delete _vertexBasis_piece; }
@@ -415,8 +391,7 @@ public:
     const gsFunction<T> & piece(const index_t k) const
     {
         //delete _vertexBasis_piece;
-        _vertexBasis_piece = new gsVertexBasis(m_geo, m_basis, m_alpha, m_beta, m_basis_plus, m_basis_minus,
-                                               m_sigma, m_kindOfEdge, m_bfID);
+        _vertexBasis_piece = new gsVertexBasis(*this);
         return *_vertexBasis_piece;
     }
 
@@ -429,7 +404,7 @@ public:
 
 
         // Computing the basis functions at the vertex
-        gsMatrix<> Phi(6,6);
+        gsMatrix<T> Phi(6,6);
         Phi.setIdentity();
 
         Phi.row(1) *= m_sigma;
@@ -440,13 +415,13 @@ public:
 
         // Computing c, c+ and c-
         // Point zero
-        gsMatrix<> zero;
+        gsMatrix<T> zero;
         zero.setZero(2,1);
 
-        std::vector<gsMatrix<>> c_0, c_1;
-        std::vector<gsMatrix < >> c_0_plus, c_1_plus, c_2_plus;
-        std::vector<gsMatrix < >> c_0_plus_deriv, c_1_plus_deriv, c_2_plus_deriv;
-        std::vector<gsMatrix < >> c_0_minus, c_1_minus;
+        std::vector<gsMatrix<T>> c_0, c_1;
+        std::vector<gsMatrix <T>> c_0_plus, c_1_plus, c_2_plus;
+        std::vector<gsMatrix <T>> c_0_plus_deriv, c_1_plus_deriv, c_2_plus_deriv;
+        std::vector<gsMatrix <T>> c_0_minus, c_1_minus;
         for (index_t i = 0; i < 2; i++) // i == 0 == u , i == 1 == v
         {
             gsMatrix<> b_0, b_1;
@@ -478,7 +453,7 @@ public:
             c_0_minus.push_back(b_0_minus + b_1_minus);
             c_1_minus.push_back(h_geo/ (p-1) * b_1_minus);
 
-            gsMatrix<> der_b_1_plus_0, der2_b_1_plus_0, der2_b_2_plus_0;
+            gsMatrix<T> der_b_1_plus_0, der2_b_1_plus_0, der2_b_2_plus_0;
             m_basis_plus[i].derivSingle_into(1, zero.row(i), der_b_1_plus_0);
             m_basis_plus[i].deriv2Single_into(1, zero.row(i), der2_b_1_plus_0);
             m_basis_plus[i].deriv2Single_into(2, zero.row(i), der2_b_2_plus_0);
@@ -496,7 +471,7 @@ public:
             c_2_plus_deriv.push_back(factor_c_2_plus * b_2_plus_deriv);
         }
 
-        std::vector<gsMatrix<>> alpha, beta, alpha_0, beta_0, alpha_deriv, beta_deriv;
+        std::vector<gsMatrix<T>> alpha, beta, alpha_0, beta_0, alpha_deriv, beta_deriv;
 
         gsMatrix < T > temp_mat;
         if (m_kindOfEdge[0])
@@ -583,27 +558,27 @@ public:
         }
 
         // Geo data:
-        gsMatrix<> geo_jac = m_geo.jacobian(zero);
+        gsMatrix<T> geo_jac = m_geo.jacobian(zero);
         gsMatrix<T> geo_der2 = m_geo.deriv2(zero);
 
         // Compute dd^^(i_k) and dd^^(i_k-1)
-        gsMatrix<> dd_ik_plus, dd_ik_minus;
-        gsMatrix<> dd_ik_minus_deriv, dd_ik_plus_deriv;
+        gsMatrix<T> dd_ik_plus, dd_ik_minus;
+        gsMatrix<T> dd_ik_minus_deriv, dd_ik_plus_deriv;
         dd_ik_minus = -1/(alpha_0[0](0,0)) * (geo_jac.col(1) +
                                               beta_0[0](0,0) * geo_jac.col(0));
 
         dd_ik_plus = 1/(alpha_0[1](0,0)) * (geo_jac.col(0) +
                                             beta_0[1](0,0) * geo_jac.col(1));
 
-        gsMatrix<> geo_deriv2_12(2,1), geo_deriv2_11(2,1), geo_deriv2_22(2,1);
+        gsMatrix<T> geo_deriv2_12(2,1), geo_deriv2_11(2,1), geo_deriv2_22(2,1);
         geo_deriv2_12.row(0) = geo_der2.row(2);
         geo_deriv2_12.row(1) = geo_der2.row(5);
         geo_deriv2_11.row(0) = geo_der2.row(0);
         geo_deriv2_11.row(1) = geo_der2.row(3);
         geo_deriv2_22.row(0) = geo_der2.row(1);
         geo_deriv2_22.row(1) = geo_der2.row(4);
-        gsMatrix<> alpha_squared_u = alpha_0[0]*alpha_0[0];
-        gsMatrix<> alpha_squared_v = alpha_0[1]*alpha_0[1];
+        gsMatrix<T> alpha_squared_u = alpha_0[0]*alpha_0[0];
+        gsMatrix<T> alpha_squared_v = alpha_0[1]*alpha_0[1];
 
         dd_ik_minus_deriv = -1/(alpha_squared_u(0,0)) * // N^2
                             ((geo_deriv2_12 + (beta_deriv[0](0,0) * geo_jac.col(0) +
@@ -618,7 +593,7 @@ public:
                             alpha_deriv[1](0,0));
 
         // Comupute d_(0,0)^(i_k), d_(1,0)^(i_k), d_(0,1)^(i_k), d_(1,1)^(i_k) ; i_k == 2
-        std::vector<gsMatrix<>> d_ik;
+        std::vector<gsMatrix<T>> d_ik;
         d_ik.push_back(Phi.col(0));
         d_ik.push_back(Phi.block(0,1,6,2) * geo_jac.col(0) ); // deriv into u
         d_ik.push_back(Phi.block(0,1,6,2) * geo_jac.col(1) ); // deriv into v
@@ -628,7 +603,7 @@ public:
                        Phi.block(0,2,6,1) * geo_der2.row(5)); // Hessian
 
         // Compute d_(*,*)^(il,ik)
-        std::vector<gsMatrix<>> d_ilik_minus, d_ilik_plus;
+        std::vector<gsMatrix<T>> d_ilik_minus, d_ilik_plus;
         d_ilik_minus.push_back(Phi.col(0));
         d_ilik_minus.push_back(Phi.block(0,1,6,2) * geo_jac.col(0));
         d_ilik_minus.push_back((geo_jac(0,0) * Phi.col(3) + geo_jac(1,0) * Phi.col(4))*geo_jac(0,0) +

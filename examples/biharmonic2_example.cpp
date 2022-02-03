@@ -56,7 +56,7 @@ void gsDirichletNeumannValuesL2Projection2(gsMultiPatch<> & mp, gsMultiBasis<> &
     mapperBdy.markBoundary(0, bnd, 0);
     mapperBdy.finalize();
 
-    gsExprAssembler<> A(1,1);
+    gsExprAssembler<real_t> A(1,1);
     A.setIntegrationElements(dbasis);
 
     auto G = A.getMap(mp);
@@ -77,7 +77,7 @@ void gsDirichletNeumannValuesL2Projection2(gsMultiPatch<> & mp, gsMultiBasis<> &
     A.assembleBdr(bc.get("Neumann"),
                   lambda *  (igrad(uu, G) * nv(G).normalized()) * (g_bdy.tr() * nv(G).normalized()) * meas(G));
 
-    gsSparseSolver<>::SimplicialLDLT solver;
+    gsSparseSolver<real_t>::SimplicialLDLT solver;
     solver.compute( A.matrix() );
     gsMatrix<real_t> & fixedDofs = const_cast<expr::gsFeSpace<real_t>& >(u).fixedPart();
     fixedDofs = solver.solve(A.rhs());
@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
     bool nitsche = false;
 
     std::string xml;
-    bool output = false;
+    std::string output;
 
     std::string fn;
 
@@ -120,14 +120,14 @@ int main(int argc, char *argv[])
     cmd.addSwitch("nitsche", "Nitsche", nitsche);
 
     cmd.addString("x", "xml", "Use the information from the xml file", xml);
-    cmd.addSwitch("output", "Output in xml (for python)", output);
+    cmd.addString("o", "output", "Output in xml (for python)", output);
     try { cmd.getValues(argc,argv); } catch (int rv) { return rv; }
     //! [Parse command line]
 
     //! [Initialize data]
-    gsMultiPatch<> mp;
+    gsMultiPatch<real_t> mp;
     gsBoundaryConditions<> bc;
-    gsFunctionExpr<> f, ms;
+    gsFunctionExpr<real_t> f, ms;
     gsOptionList optionList;
     //! [Initialize data]
 
@@ -224,7 +224,7 @@ int main(int argc, char *argv[])
     //! [Read option list]
 
     //! [Refinement]
-    gsMultiBasis<> dbasis(mp, false);//true: poly-splines (not NURBS)
+    gsMultiBasis<real_t> dbasis(mp, false);//true: poly-splines (not NURBS)
 
     // Elevate and p-refine the basis to order p + numElevate
     // where p is the highest degree in the bases
@@ -251,12 +251,12 @@ int main(int argc, char *argv[])
     //! [Refinement]
 
     //! [Problem setup]
-    gsExprAssembler<> A(1,1);
+    gsExprAssembler<real_t> A(1,1);
     //gsInfo<<"Active options:\n"<< A.options() <<"\n";
 
     // Elements used for numerical integration
     A.setIntegrationElements(dbasis);
-    gsExprEvaluator<> ev(A);
+    gsExprEvaluator<real_t> ev(A);
 
     // Set the geometry map
     auto G = A.getMap(mp);
@@ -275,18 +275,17 @@ int main(int argc, char *argv[])
     approxC1.options().setSwitch("plot",plot);
 
     // Solution vector and solution variable
-    gsMatrix<> solVector;
+    gsMatrix<real_t> solVector;
     auto u_sol = A.getSolution(u, solVector);
 
     // Recover manufactured solution
     auto u_ex = ev.getVariable(ms, G);
     //! [Problem setup]
 
-    //! [Solver loop]
-    gsSparseSolver<>::SimplicialLDLT solver;
 
-    gsVector<> l2err(numRefine+1), h1err(numRefine+1), h2err(numRefine+1),
-    IFaceErr(numRefine+1), meshsize(numRefine+1);
+    //! [Solver loop]
+    gsVector<real_t> l2err(numRefine+1), h1err(numRefine+1), h2err(numRefine+1),
+    IFaceErr(numRefine+1), meshsize(numRefine+1), dofs(numRefine+1);
     gsInfo<< "(dot1=approxC1construction, dot2=assembled, dot3=solved, dot4=got_error)\n"
         "\nDoFs: ";
     double setup_time(0), ma_time(0), slv_time(0), err_time(0);
@@ -325,6 +324,7 @@ int main(int argc, char *argv[])
         A.initSystem();
         setup_time += timer.stop();
 
+        dofs[r] = A.numDofs();
         gsInfo<< A.numDofs() <<std::flush;
 
         timer.restart();
@@ -398,6 +398,7 @@ int main(int argc, char *argv[])
         gsInfo<< "." <<std::flush;// Assemblying done
 
         timer.restart();
+        gsSparseSolver<real_t>::SimplicialLDLT solver;
         solver.compute( A.matrix() );
         solVector = solver.solve(A.rhs());
 
@@ -508,26 +509,26 @@ int main(int argc, char *argv[])
     //! [Export visualization in ParaView]
 
     //! [Export data to xml]
-    if (output)
+    if (!output.empty())
     {
-        std::string cmdName = "testtest";
+        gsMatrix<real_t> error_collection(l2err.rows(), 6);
+        error_collection.col(0) = meshsize;
+        error_collection.col(1) = dofs;
+        error_collection.col(2) = l2err;
+        error_collection.col(3) = h1err;
+        error_collection.col(4) = h2err;
+        error_collection.col(5) = IFaceErr;
 
-        gsMatrix<> error_collection(l2err.rows(), 4);
-        error_collection.col(0) = l2err;
-        error_collection.col(1) = h1err;
-        error_collection.col(2) = h2err;
-        error_collection.col(3) = IFaceErr;
-
-        gsFileData<> xml_out;
+        gsFileData<real_t> xml_out;
         xml_out << error_collection;
         // Add solution
         // [...]
-        xml_out.save(cmdName);
-
-        gsFileData<> test(cmdName+".xml");
+        xml_out.save(output);
+        gsInfo << "XML saved to " + output << "\n";
+/*        gsFileData<> test(cmdName+".xml");
         gsMatrix<> matrix_temp;
         test.getId(0,matrix_temp);
-        gsInfo << "Matrix: " << matrix_temp << "\n";
+        gsInfo << "Matrix: " << matrix_temp << "\n"*/;
     }
     //! [Export data to xml]
 

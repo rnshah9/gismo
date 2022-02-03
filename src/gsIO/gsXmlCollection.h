@@ -13,7 +13,7 @@
 
 #pragma once
 
-#include <gismo.h>
+#include <gsCore/gsLinearAlgebra.h>
 
 #include <iostream>
 #include <string>
@@ -79,7 +79,8 @@ public:
     /// this function (once) when you finish adding files
     void load(String const & fn)
     {
-
+        m_fd.clear();
+        m_fd.read(fn);
     }
 
     /// Get Functions
@@ -106,11 +107,25 @@ public:
     {
         gsMatrix<real_t> result;
         gsFileData<real_t> file(m_fd.getString(label));
-        gsInfo << file.contents() << "\n";
         file.getFirst(result);
-        gsInfo << result << "\n";
         return result;
     }
+
+    gsMatrix<real_t> getMatrix(  const int & id )  const
+    {
+        gsMatrix<real_t> result;
+        gsFileData<real_t> file(m_fd.getString(id));
+        file.getFirst(result);
+        return result;
+    }
+
+    std::string getString( index_t  id)  const
+    {
+        return m_fd.getString(id);
+    }
+
+    /// \brief Reports the number of objects which are held in the file data
+    int numData() const { return m_fd.numData();}
 
 
 private:

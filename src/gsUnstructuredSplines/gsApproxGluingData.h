@@ -100,11 +100,7 @@ void gsApproxGluingData<d, T>::setGlobalGluingData(index_t patchID, index_t dir)
 
     //! [Problem setup]
     gsSparseSolver<real_t>::LU solver;
-    gsExprAssembler<> A(1,1);
-
-    typedef gsExprAssembler<>::variable    variable;
-    typedef gsExprAssembler<>::space       space;
-    typedef gsExprAssembler<>::solution    solution;
+    gsExprAssembler<T> A(1,1);
 
     // Elements used for numerical integration
     gsMultiBasis<T> BsplineSpace(bsp_gD);
@@ -115,7 +111,7 @@ void gsApproxGluingData<d, T>::setGlobalGluingData(index_t patchID, index_t dir)
     auto aa = A.getCoeff(alpha);
 
     // Set the discretization space
-    space u = A.getSpace(BsplineSpace);
+    auto u = A.getSpace(BsplineSpace);
 
     // Create Mapper
     gsDofMapper map(BsplineSpace);
@@ -126,7 +122,6 @@ void gsApproxGluingData<d, T>::setGlobalGluingData(index_t patchID, index_t dir)
         map.markBoundary(0, act); // Patch 0
     map.finalize();
 
-    gsBoundaryConditions<> bc_empty;
     u.setupMapper(map);
 
     gsMatrix<T> & fixedDofs = const_cast<expr::gsFeSpace<T>&>(u).fixedPart();
@@ -139,13 +134,12 @@ void gsApproxGluingData<d, T>::setGlobalGluingData(index_t patchID, index_t dir)
         fixedDofs = alpha.eval(points_bdy).transpose();
 
     A.initSystem();
-
-    A.assemble(u * u.tr(),u * aa);
+    A.assemble(u * u.tr(), u * aa);
 
     solver.compute( A.matrix() );
     gsMatrix<> solVector = solver.solve(A.rhs());
 
-    solution u_sol = A.getSolution(u, solVector);
+    auto u_sol = A.getSolution(u, solVector);
     gsMatrix<> sol;
     u_sol.extract(sol);
 
@@ -161,13 +155,12 @@ void gsApproxGluingData<d, T>::setGlobalGluingData(index_t patchID, index_t dir)
         fixedDofs = beta.eval(points_bdy).transpose();
 
     A.initSystem();
-
-    A.assemble(u * u.tr(),u * bb);
+    A.assemble(u * u.tr(), u * bb);
 
     solver.compute( A.matrix() );
     solVector = solver.solve(A.rhs());
 
-    solution u_sol2 = A.getSolution(u, solVector);
+    auto u_sol2 = A.getSolution(u, solVector);
     u_sol2.extract(sol);
 
     tilde_temp = bsp_gD.makeGeometry(sol);

@@ -33,7 +33,7 @@ namespace gismo
 
       .def("degreeElevate", &Class::degreeElevate, "Elevates the degree", py::arg("elevationSteps")=1)
       .def("uniformRefine", &Class::uniformRefine, "Refines uniformly"  , py::arg("numKnots")=1 , py::arg("mul")=1)
-
+      .def("computeTopology", &Class::computeTopology, "Compute computeTopology.")
       ;
   }
 

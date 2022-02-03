@@ -27,33 +27,68 @@ from python2latex.python2latex import MyDocument
 from python2latex.python2tikz import MyTikz
 
 ''' Set the xml_collection path name '''
-xml_collection = "testtest.xml"
+xml_collection = "results/XmlCollection/XmlCollection_output.xml"
+max_id = 2
 
+path_tikz = "tikz_results/"
+path_fig = "figure_results/"
 
-#result = gs.io.gsFileData(xml_collection)
+file = gs.io.gsXmlCollection("")
+file.load(xml_collection)
 
-#result.getId(0,mp_in)
-#print(mp_in)
-#print(result.read())
+list_dict = []
 
-M = np.zeros((2,4))
-M[0:] = np.array([1,2,3,4])
-M[1:] = np.array([2,3,4,5])
+for id in range(max_id):
+    my_dict = {"Matrix": None, "Deg": None, "Reg": None, "Geo": None, "Name": None}
 
-N = M*0.5
-O = N*0.5
-x = np.array([0.5,0.25])
+    my_dict["Matrix"] = file.getMatrix(id)
+    path_name = file.getString(id)
+    name = path_name[path_name.find('/results/') + 9:]
+    name = name[:name.find('.xml')]
+
+    geo = path_name[path_name.find('/g') + 1:path_name.find('/g') + 6]
+    deg = path_name[path_name.find('-p') + 1:path_name.find('-p') + 3]
+    reg = path_name[path_name.find('-r') + 1:path_name.find('-r') + 3]
+    my_dict["Geo"] = geo
+    my_dict["Deg"] = deg
+    my_dict["Reg"] = reg
+    my_dict["Name"] = name
+
+    list_dict.append(my_dict)
+
+list_tikz = []
+for dict in list_dict:
+    matrix = dict["Matrix"]
+
+    x = matrix[:, 0]  # Mesh size
+    M = matrix[:, 2:5]  # L2 Error + H1 Error + H2 Error
+
+    '''Computing the rates'''
+    # l2error = M[:,0]
+    # rate_l2 = np.log(l2error[:-1]/l2error[1:])/np.log(2.0)
+    # print(np.around(rate_l2,2))
+    #
+    # h1error = M[:,1]
+    # rate_h1 = np.log(h1error[:-1]/h1error[1:])/np.log(2.0)
+    # print(np.around(rate_h1,2))
+    #
+    # h2error = M[:,2]
+    # rate_h2 = np.log(h2error[:-1]/h2error[1:])/np.log(2.0)
+    # print(np.around(rate_h2,2))
+
+    fig = MyTikz()
+    opt_axis = {'xmode': 'log', 'ymode': 'log', 'height': '6cm', 'mark options': '{solid}'}
+    fig.setOptions(opt_axis)
+    color_list = ["red", "green", "blue", "yellow"]
+    fig.setColor(color_list)
+    fig.create_error_plot(x, M)
+    fig.generate_tikz(path_tikz + dict["Geo"] + "-" + dict["Name"])
+
+    list_tikz.append(dict["Geo"] + "-" + dict["Name"])
 
 doc = MyDocument()
-fig = MyTikz()
-opt_axis = {'xmode':'log', 'ymode':'log', 'height':'6cm', 'mark options':'{solid}'}
-fig.setOptions(opt_axis)
-color_list = ["red","green","blue"]
-fig.setColor(color_list)
-fig.create_error_plot(x, M, N, O)
-fig.generate_tikz("figure")
-
-tikzFigure_list = ["figure", "figure", "figure","figure", "figure", "figure"]
-doc.addTikzFigure(tikzFigure_list, row=4)
-doc.generate_pdf("test", compiler="pdflatex", compiler_args=["-shell-escape"], clean_tex=False)
+doc.addTikzFigure(list_tikz, row=4)
+doc.generate_pdf("result", compiler="pdflatex", compiler_args=["-shell-escape"], clean_tex=False)
 doc.clean_extensions()
+
+

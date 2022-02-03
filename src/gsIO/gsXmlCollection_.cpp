@@ -27,8 +27,13 @@ void pybind11_init_gsXmlCollection(py::module &m)
 
   .def("getId", static_cast<void (Class::*)(const int &, gsMultiPatch<real_t> &) const > (&Class::getId), "Get from file with id the MultiPatch")
   .def("getLabel", static_cast<void (Class::*)(const std::string &, gsMultiPatch<real_t> &) const > (&Class::getLabel), "Get from file with label the MultiPatch")
-  .def("getMatrix", &Class::getMatrix, "Get from file with label the Matrix")
+  //.def("getMatrix", &Class::getMatrix, "Get from file with label the Matrix")
+  .def("getMatrix", static_cast<gsMatrix<real_t> (Class::*)(const int &) const > (&Class::getMatrix), "Get from file with id the Matrix")
+  .def("getMatrix", static_cast<gsMatrix<real_t> (Class::*)(const std::string &) const > (&Class::getMatrix), "Get from file with String the Matrix")
 
+  .def("numData", &Class::numData, "Get number of Data")
+  .def("getString", &Class::getString, "Get string of Id")
+  .def("load", &Class::load, "Load Filedata from String")
   ;
 }
 

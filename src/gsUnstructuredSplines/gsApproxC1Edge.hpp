@@ -80,14 +80,14 @@ namespace gismo
 
             // [!The same setup for each bf!]
             gsSparseSolver<real_t>::SimplicialLDLT solver;
-            gsExprAssembler<> A(1, 1);
+            gsExprAssembler<T> A(1, 1);
 
             // Elements used for numerical integration
             gsMultiBasis<T> edgeSpace(
                     m_auxPatches[patchID].getBasisRotated().piece(sidesContainer[patchID]));
 
             A.setIntegrationElements(edgeSpace);
-            gsExprEvaluator<> ev(A);
+            gsExprEvaluator<T> ev(A);
 
             // Set the discretization space
             auto u = A.getSpace(edgeSpace);
@@ -126,10 +126,10 @@ namespace gismo
 
                 A.assemble(u * aa);
 
-                gsMatrix<> solVector = solver.solve(A.rhs());
+                gsMatrix<T> solVector = solver.solve(A.rhs());
 
                 auto u_sol = A.getSolution(u, solVector);
-                gsMatrix<> sol;
+                gsMatrix<T> sol;
                 u_sol.extract(sol);
 
                 result.addPatch(edgeSpace.basis(0).makeGeometry(give(sol)));
@@ -145,10 +145,10 @@ namespace gismo
 
                 A.assemble(u * aa);
 
-                gsMatrix<> solVector = solver.solve(A.rhs());
+                gsMatrix<T> solVector = solver.solve(A.rhs());
 
                 auto u_sol = A.getSolution(u, solVector);
-                gsMatrix<> sol;
+                gsMatrix<T> sol;
                 u_sol.extract(sol);
 
                 result.addPatch(edgeSpace.basis(0).makeGeometry(give(sol)));
