@@ -7,12 +7,14 @@ class MyTikz(Document):
     def __init__(self):
         super().__init__(documentclass='standalone')
         self.opt = {}
-        self.opt_plot = [{'mark': 'diamond*', 'color': 'green', '': 'dashed', 'line width': '1pt'},
-                         {'mark': 'square*', 'color': 'blue', '': 'dashed', 'line width': '1pt'},
-                         {'mark': 'triangle*', 'color': 'red', '': 'dashed', 'line width': '1pt'},
-                         {'mark': 'pentagon*', 'color': 'yellow', '': 'dashed', 'line width': '1pt'},
-                         {'mark': 'halfcircle*', 'color': 'brown', '': 'dashed', 'line width': '1pt'}]
+        self.opt_plot = [{'mark': 'diamond*', 'color': 'green', 'line width': '1pt'},
+                         {'mark': 'square*', 'color': 'blue', 'line width': '1pt'},
+                         {'mark': 'triangle*', 'color': 'red', 'line width': '1pt'},
+                         {'mark': 'pentagon*', 'color': 'yellow', 'line width': '1pt'},
+                         {'mark': 'halfcircle*', 'color': 'brown', 'line width': '1pt'}]
         self.opt_plot = self.opt_plot * 10
+
+        self.opt_mat = [["solid"], ["dashed"], ["dotted"]]
 
     def setOptions(self, options):
         self.opt = options
@@ -70,11 +72,11 @@ class MyTikz(Document):
     def create_error_plot(self, x, *results):
 
         points_list = []  # Number of matrices
-        for res in results:
+        for idx, res in enumerate(results):
             points = []
             for col in range(res.shape[1]):
                 points_temp = []  # Number of cols
-                for i, j in zip(x, res[:, col]):
+                for i, j in zip(x[idx], res[:, col]):
                     points_temp.append([i, j])
                 points.append(points_temp)
             points_list.append(points)
@@ -82,7 +84,16 @@ class MyTikz(Document):
         opt_axis = TikZOptions(**self.opt, width=NoEscape(r'1\textwidth'))
         with self.create(TikZ()) as tikz:
             with self.create(Axis(options=opt_axis)) as axis:
-                for points in points_list:
+                for idx, points in enumerate(points_list):
                     for col in range(len(points)):
-                        curve = Plot(options=self.opt_plot[col], coordinates=points[col])
+
+                        # Define new line style for each matrix
+                        new_list = []
+                        for key, val in self.opt_plot[col].items():
+                            new_list.append(str(key) + "=" + str(val))
+
+                        for item in self.opt_mat[idx]:
+                            new_list.append(item)
+
+                        curve = Plot(options=new_list, coordinates=points[col])
                         axis.append(curve)

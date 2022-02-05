@@ -858,7 +858,7 @@ namespace gismo
                     index_t c = (j-k) % valence;
                     if (c < 0)
                         c += valence;
-                    tmp(j,k) = P[c, i];
+                    tmp(j,k) = P(c, i);
                 }
 
             // gsDebugVar(offsetI);

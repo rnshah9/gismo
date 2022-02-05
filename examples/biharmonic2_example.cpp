@@ -16,12 +16,26 @@
 #include <gismo.h>
 
 #include <gsUnstructuredSplines/gsApproxC1Spline.h>
-//#include <gsUnstructuredSplines/gsDPatch.h>
+#include <gsUnstructuredSplines/gsDPatch.h>
 
-#include <gsIO/gsCSVWriter.h>
 
 using namespace gismo;
 //! [Include namespace]
+
+/**
+ * Smoothing method:
+ * - 0 == Approx C1 method
+ * - 1 == Nitsche's method
+ */
+enum MethodFlags
+{
+    APPROXC1    = 0 << 0, // Approx C1 Method
+    NITSCHE     = 1 << 0, // Nitsche's method
+    DPATCH      = 1 << 1, // D-Patch
+    //????      = 1 << 2, // ????
+    //????      = 1 << 3, // ????
+    // Add more [...]
+};
 
 void setMapperForBiharmonic(gsBoundaryConditions<> & bc, gsMappedBasis<2,real_t> & bb2, gsDofMapper & mapper)
 {
@@ -88,7 +102,8 @@ int main(int argc, char *argv[])
 {
     //! [Parse command line]
     bool plot = false;
-    index_t smoothing = 2;
+
+    index_t smoothing = 0;
 
     index_t numRefine  = 3;
     index_t discreteDegree = 3;
@@ -96,8 +111,7 @@ int main(int argc, char *argv[])
     bool last = false;
     bool info = false;
     bool neumann = false;
-    bool nitsche = false;
-
+    real_t penalty_init = -1.0;
     std::string xml;
     std::string output;
 
@@ -107,17 +121,21 @@ int main(int argc, char *argv[])
 
     gsCmdLine cmd("Tutorial on solving a Biharmonic problem.");
     cmd.addInt( "s", "smoothing","Smoothing", smoothing );
+
     cmd.addInt( "p", "discreteDegree","Which discrete degree?", discreteDegree );
     cmd.addInt( "r", "discreteRegularity", "Number of discreteRegularity",  discreteRegularity );
     cmd.addInt( "l", "refinementLoop", "Number of refinementLoop",  numRefine );
+
     cmd.addString( "f", "file", "Input geometry file", fn );
     cmd.addInt( "g", "geometry", "Which geometry",  geometry );
+
     cmd.addSwitch("last", "Solve solely for the last level of h-refinement", last);
     cmd.addSwitch("plot", "Create a ParaView visualization file with the solution", plot);
     cmd.addSwitch("info", "Getting the information inside of Approximate C1 basis functions", info);
 
     cmd.addSwitch("neumann", "Neumann", neumann);
-    cmd.addSwitch("nitsche", "Nitsche", nitsche);
+
+    cmd.addReal( "y", "penalty", "Fixed Penalty value for Nitsche's method",  penalty_init);
 
     cmd.addString("x", "xml", "Use the information from the xml file", xml);
     cmd.addString("o", "output", "Output in xml (for python)", output);
@@ -217,7 +235,9 @@ int main(int argc, char *argv[])
     discreteRegularity = optionList.getInt("discreteRegularity");
     numRefine = optionList.getInt("refinementLoop");
 
-    nitsche = optionList.getSwitch("nitsche");
+    smoothing = optionList.getInt("smoothing");
+
+    penalty_init = optionList.getReal("penalty");
 
     plot = optionList.getSwitch("plot");
     info = optionList.getSwitch("info");
@@ -229,6 +249,8 @@ int main(int argc, char *argv[])
     // Elevate and p-refine the basis to order p + numElevate
     // where p is the highest degree in the bases
     dbasis.setDegree( discreteDegree); // preserve smoothness
+    if (smoothing == MethodFlags::DPATCH)
+        mp.degreeElevate(discreteDegree- mp.patch(0).degree(0));
 
     // h-refine each basis
     if (last)
@@ -241,8 +263,11 @@ int main(int argc, char *argv[])
     // Assume that the condition holds for each patch TODO
     // Refine once
     if (dbasis.basis(0).numElements() < 4)
+    {
         dbasis.uniformRefine(1, discreteDegree-discreteRegularity);
-
+        if (smoothing == MethodFlags::DPATCH)
+            mp.uniformRefine(1, discreteDegree-discreteRegularity);
+    }
 
     gsInfo << "Patches: "<< mp.nPatches() <<", degree: "<< dbasis.minCwiseDegree() <<"\n";
 #ifdef _OPENMP
@@ -266,10 +291,9 @@ int main(int argc, char *argv[])
 
     // Set the discretization space
     gsMappedBasis<2,real_t> bb2;
-    auto u = nitsche ? A.getSpace(dbasis) : A.getSpace(bb2);
+    auto u = smoothing == MethodFlags::NITSCHE ? A.getSpace(dbasis) : A.getSpace(bb2);
 
     // The approx. C1 space
-    gsSparseMatrix<real_t> global2local;
     gsApproxC1Spline<2,real_t> approxC1(mp,dbasis);
     approxC1.options().setSwitch("info",info);
     approxC1.options().setSwitch("plot",plot);
@@ -285,22 +309,44 @@ int main(int argc, char *argv[])
 
     //! [Solver loop]
     gsVector<real_t> l2err(numRefine+1), h1err(numRefine+1), h2err(numRefine+1),
-    IFaceErr(numRefine+1), meshsize(numRefine+1), dofs(numRefine+1);
+    IFaceErr(numRefine+1), meshsize(numRefine+1), dofs(numRefine+1), penalty(numRefine+1);
     gsInfo<< "(dot1=approxC1construction, dot2=assembled, dot3=solved, dot4=got_error)\n"
         "\nDoFs: ";
     double setup_time(0), ma_time(0), slv_time(0), err_time(0);
     gsStopwatch timer;
     for (int r=0; r<=numRefine; ++r)
     {
-        dbasis.uniformRefine(1,discreteDegree -discreteRegularity);
-        meshsize[r] = dbasis.basis(0).getMinCellLength();
 
-        if (!nitsche)
+
+        if (smoothing == MethodFlags::APPROXC1)
+        {
+            dbasis.uniformRefine(1,discreteDegree -discreteRegularity);
+            meshsize[r] = dbasis.basis(0).getMinCellLength();
             approxC1.update(bb2);
+        }
+        else if (smoothing == MethodFlags::NITSCHE)
+        {
+            dbasis.uniformRefine(1,discreteDegree -discreteRegularity);
+            meshsize[r] = dbasis.basis(0).getMinCellLength();
+        }
+        else if (smoothing == MethodFlags::DPATCH)
+        {
+            mp.uniformRefine(1,discreteDegree-discreteRegularity);
+            dbasis.uniformRefine(1,discreteDegree-discreteRegularity);
+            meshsize[r] = mp.basis(0).getMinCellLength();
+
+            gsSparseMatrix<real_t> global2local;
+            gsDPatch<2,real_t> dpatch(mp);
+            dpatch.matrix_into(global2local);
+            global2local = global2local.transpose();
+            mp = dpatch.exportToPatches();
+            dbasis = dpatch.localBasis();
+            bb2.init(dbasis,global2local);
+        }
         gsInfo<< "." <<std::flush; // Approx C1 construction done
 
         // Setup the mapper
-        if (!nitsche) // MappedBasis
+        if (smoothing == MethodFlags::APPROXC1 || smoothing == MethodFlags::DPATCH) // MappedBasis
         {
             gsDofMapper map;
             setMapperForBiharmonic(bc, bb2,map);
@@ -309,10 +355,10 @@ int main(int argc, char *argv[])
             u.setupMapper(map);
             gsDirichletNeumannValuesL2Projection2(mp, dbasis, bc, bb2, u);
         }
-        else // Nitsche
+        else if (smoothing == MethodFlags::NITSCHE) // Nitsche
         {
             // Setup the system
-            u.setup(bc, dirichlet::user, 0);
+            u.setup(bc, dirichlet::l2Projection, 0);
         }
 
         //gsMatrix<real_t> u_fixed_new = u.fixedPart();
@@ -336,63 +382,40 @@ int main(int argc, char *argv[])
         //auto g_L = A.getCoeff(laplace, G);
         A.assembleBdr(bc.get("Laplace"), (igrad(u, G) * nv(G)) * g_L.tr() );
 
-        // Enforce Neumann conditions to right-hand side
-        //A.assembleRhsBc(ilapl(u, G) * (igrad(u_ex) * nv(G)).tr(), bc.neumannSides() );
-
-        real_t penalty  = 4 * ( dbasis.maxCwiseDegree() + dbasis.dim() ) * ( dbasis.maxCwiseDegree() + 1 );
+        real_t stab     = 4 * ( dbasis.maxCwiseDegree() + dbasis.dim() ) * ( dbasis.maxCwiseDegree() + 1 );
         real_t m_h      = dbasis.basis(0).getMinCellLength(); //*dbasis.basis(0).getMinCellLength();
-        real_t mu       = 2 * penalty / m_h;
-
-        if (nitsche)
+        real_t mu       = 2 * stab / m_h;
+        if (smoothing == MethodFlags::NITSCHE)
         {
-            gsInfo << "mu: " << mu << "\n";
-            /*
-            A.assembleIfc(mp.interfaces(), - 0.5 * ((igrad(u.left(), G.left()) - igrad(u.right(), G.right())) * nv(G)) *
-                    (ilapl(u.left(), G.left()) + ilapl(u.right(), G.right()))
-                    - 0.5 * ((igrad(u.right(), G.right()) - igrad(u.left(), G.left())) * nv(G)) *
-                    (ilapl(u.right(), G.right()) + ilapl(u.left(), G.left()))
-                    * meas(G)
-            );
-             */
+            mu = penalty_init == -1.0 ? mu : penalty_init / m_h;
+            penalty[r] = mu;
+
             real_t alpha = 1;
-            //A.assembleIfc(mp.interfaces(), - 0.5 * ((igrad(u.left(), G.left()) * nv(G)) * ilapl(u.left(), G.left()).tr()) * meas(G),
-            //A.assembleIfc(mp.interfaces(), + 0.5 * ((igrad(u.right(), G.right()) * nv(G)) * ilapl(u.right(), G.right()).tr()) * meas(G));
-
-            //A.assembleIfc(mp.interfaces(), - 0.5 * ((igrad(u.left(), G.left()) * nv(G.left())) * ilapl(u.right(), G.right()).tr()) * meas(G));
-            //A.assembleIfc(mp.interfaces(), + 0.5 * ((igrad(u.right(), G.right()) * nv(G.right())) * ilapl(u.left(), G.left()).tr()) * meas(G));
-
-            //A.assembleIfc(mp.interfaces(), alpha * ((igrad(u.left(), G.left()) * nv(G)) * (igrad(u.left(), G.left()) * nv(G)).tr()) * meas(G));
-            //A.assembleIfc(mp.interfaces(), alpha * ((igrad(u.right(), G.right()) * nv(G)) * (igrad(u.right(), G.right()) * nv(G)).tr()) * meas(G));
-
-            //A.assembleIfc(mp.interfaces(), - alpha * ((igrad(u.left(), G.left()) * nv(G)) * (igrad(u.right(), G.right()) * nv(G)).tr()) * meas(G));
-            //A.assembleIfc(mp.interfaces(), - alpha * ((igrad(u.right(), G.right()) * nv(G)) * (igrad(u.left(), G.left()) * nv(G)).tr()) * meas(G));
-
             A.assembleIfc(mp.interfaces(),
-                     //B11
-                     -alpha*0.5*igrad( u.left() , G.left()) * nv(G).normalized() * (ilapl(u.left(), G.left())).tr()  * meas(G),
-                     //B12
-                     -alpha*0.5*igrad( u.left()  , G.left()) * nv(G).normalized() * (ilapl(u.right(), G.right())).tr() * meas(G),
-                     //B21
-                     alpha*0.5*igrad( u.right(), G.right()) * nv(G).normalized() * (ilapl(u.left(), G.left())).tr() * meas(G),
-                     //B22
-                     alpha*0.5*igrad( u.right() , G.right()) * nv(G).normalized() * (ilapl(u.right(), G.right())).tr() * meas(G),
-/*
-                     // symmetry
-                     beta *0.5*igrad( u_dg.right(), G) * nv(G).normalized() * u_dg.right().tr() * meas(G),
-                     -beta *0.5*igrad(u_dg.right(), G) * nv(G).normalized() * u_dg.left() .tr() * meas(G),
-                     beta *0.5*igrad( u_dg.left() , G) * nv(G).normalized() * u_dg.right().tr() * meas(G),
-                     -beta *0.5*igrad(u_dg.left() , G) * nv(G).normalized() * u_dg.left() .tr() * meas(G),
-*/
-                     // E11
-                      mu * igrad(u.left(), G.left()) * nv(G).normalized() * (igrad(u.left(), G.left()) * nv(G).normalized()).tr() * meas(G),
-                     //-E12
-                      -mu * (igrad(u.left(), G.left()) * nv(G).normalized()) * (igrad(u.right(), G.right()) * nv(G).normalized()).tr() * meas(G),
-                     //-E21
-                      -mu * (igrad(u.right(), G.right()) * nv(G).normalized()) * (igrad(u.left(), G.left()) * nv(G).normalized()).tr() * meas(G),
-                     // E22
-                      mu * igrad(u.right(), G.right()) * nv(G).normalized() * (igrad(u.right(), G.right()) * nv(G).normalized()).tr() * meas(G)
-                );
+                //B11
+                -alpha*0.5*igrad( u.left() , G) * nv(G.left()).normalized() * (ilapl(u.left(), G)).tr() * nv(G.left()).norm(),
+                -alpha*0.5*(igrad( u.left() , G) * nv(G.left()).normalized() * (ilapl(u.left(), G)).tr()).tr() * nv(G.left()).norm(),
+                //B12
+                -alpha*0.5*igrad( u.left()  , G.left()) * nv(G.left()).normalized() * (ilapl(u.right(), G.right())).tr() * nv(G.left()).norm(),
+                -alpha*0.5*(igrad( u.left()  , G.left()) * nv(G.left()).normalized() * (ilapl(u.right(), G.right())).tr()).tr() * nv(G.left()).norm(),
+                //B21
+                alpha*0.5*igrad( u.right(), G.right()) * nv(G.left()).normalized() * (ilapl(u.left(), G.left())).tr() * nv(G.left()).norm(),
+                alpha*0.5*(igrad( u.right(), G.right()) * nv(G.left()).normalized() * (ilapl(u.left(), G.left())).tr()).tr() * nv(G.left()).norm(),
+                //B22
+                alpha*0.5*igrad( u.right() , G.right()) * nv(G.left()).normalized() * (ilapl(u.right(), G.right())).tr() * nv(G.left()).norm(),
+                alpha*0.5*(igrad( u.right() , G.right()) * nv(G.left()).normalized() * (ilapl(u.right(), G.right())).tr()).tr() * nv(G.left()).norm(),
+
+                // E11
+                mu * igrad(u.left(), G.left()) * nv(G.left()).normalized() * (igrad(u.left(), G.left()) * nv(G.left()).normalized()).tr() * nv(G.left()).norm(),
+                //-E12
+                -mu * (igrad(u.left(), G.left()) * nv(G.left()).normalized()) * (igrad(u.right(), G.right()) * nv(G.left()).normalized()).tr() * nv(G.left()).norm(),
+                //-E21
+                -mu * (igrad(u.right(), G.right()) * nv(G.left()).normalized()) * (igrad(u.left(), G.left()) * nv(G.left()).normalized()).tr() * nv(G.left()).norm(),
+                // E22
+                mu * igrad(u.right(), G.right()) * nv(G.left()).normalized() * (igrad(u.right(), G.right()) * nv(G.left()).normalized()).tr() * nv(G.left()).norm()
+            );
         }
+
 
         ma_time += timer.stop();
         gsInfo<< "." <<std::flush;// Assemblying done
@@ -415,18 +438,24 @@ int main(int argc, char *argv[])
         h2err[r]= h1err[r] +
                  math::sqrt(ev.integral( ( ihess(u_ex) - ihess(u_sol,G) ).sqNorm() * meas(G) )); // /ev.integral( ihess(f).sqNorm()*meas(G) )
 
-        if (!nitsche)
+        if (smoothing == MethodFlags::APPROXC1 || smoothing == MethodFlags::DPATCH)
         {
             gsMatrix<real_t> solFull;
             u_sol.extractFull(solFull);
             gsMappedSpline<2, real_t> mappedSpline(bb2, solFull);
 
             auto ms_sol = A.getCoeff(mappedSpline);
-
             IFaceErr[r] = math::sqrt(ev.integralInterface(((igrad(ms_sol.left(), G.left()) -
                                                             igrad(ms_sol.right(), G.right())) *
                                                            nv(G).normalized()).sqNorm() * meas(G)));
         }
+        else if (smoothing == MethodFlags::NITSCHE)
+        {
+            IFaceErr[r] = math::sqrt(ev.integralInterface((( igrad(u_sol.left(), G.left()) -
+                                                            igrad(u_sol.right(), G.right())) *
+                                                           nv(G.left()).normalized()).sqNorm() * meas(G.left()), mp.interfaces()));
+        }
+
 
         //gsMatrix<> points(2,1);
         //points << 1, 0.5;
@@ -437,8 +466,8 @@ int main(int argc, char *argv[])
         //bb2.evalAllDers_into(1, points, 1, result);
         //gsDebugVar(result[1].reshape(2,result[1].rows()/2));
 
-        //gsDebugVar(ev.integralInterface((igrad(u_sol.left(),G) * nv(G).normalized()).sqNorm() * meas(G)));
-        //gsDebugVar(ev.integralInterface((igrad(u_sol.right(),G) * nv(G).normalized()).sqNorm() * meas(G)));
+        //gsDebugVar(ev.integralInterface((igrad(u_sol.left(),G.left()) * nv(G.left()).normalized()).sqNorm() * meas(G.left())));
+        //gsDebugVar(ev.integralInterface((igrad(u_sol.right(),G.right()) * nv(G.left()).normalized()).sqNorm() * meas(G.left())));
 
         //gsDebugVar(ev.integralInterface((igrad(u_sol.left(),G) * nv(G).normalized()
         //- igrad(u_sol.right(),G) * nv(G).normalized()).sqNorm() * meas(G)));
@@ -463,6 +492,8 @@ int main(int argc, char *argv[])
     gsInfo<<"     Norms: "<< err_time   <<"\n";
 
     gsInfo<< "\nMesh-size: " << meshsize.transpose() << "\n";
+    if (smoothing == MethodFlags::NITSCHE)
+        gsInfo<< "\nStabilization: " << penalty.transpose() << "\n";
 
     //! [Error and convergence rates]
     gsInfo<< "\nL2 error: "<<std::scientific<<std::setprecision(3)<<l2err.transpose()<<"\n";
@@ -511,16 +542,23 @@ int main(int argc, char *argv[])
     //! [Export data to xml]
     if (!output.empty())
     {
-        gsMatrix<real_t> error_collection(l2err.rows(), 6);
+        index_t cols = smoothing == MethodFlags::NITSCHE ? 7 : 6;
+        gsMatrix<real_t> error_collection(l2err.rows(), cols);
         error_collection.col(0) = meshsize;
         error_collection.col(1) = dofs;
         error_collection.col(2) = l2err;
         error_collection.col(3) = h1err;
         error_collection.col(4) = h2err;
         error_collection.col(5) = IFaceErr;
+        if (smoothing == MethodFlags::NITSCHE)
+            error_collection.col(6) = penalty;
 
         gsFileData<real_t> xml_out;
         xml_out << error_collection;
+        xml_out.addString(std::to_string(discreteDegree),"Degree");
+        xml_out.addString(std::to_string(discreteRegularity),"Regularity");
+        xml_out.addString(std::to_string(numRefine),"NumRefine");
+        xml_out.addString(std::to_string(smoothing),"Method");
         // Add solution
         // [...]
         xml_out.save(output);

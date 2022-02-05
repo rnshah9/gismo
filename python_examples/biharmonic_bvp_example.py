@@ -21,10 +21,17 @@ print("G+Smo path:", gismo_path, "(change if needed).")
 sys.path.append(gismo_path)
 
 import pygismo as gs
-import numpy as np
+
+from enum import Enum
 
 
-def create_biharmonic_bvp(path_geo, loop, deg, reg, path_bvp):
+class Method(Enum):
+    ApproxC1 = 0
+    Nitsche = 1
+    DPatch = 2
+
+
+def create_biharmonic_bvp(path_geo, loop, deg, reg, path_bvp, method, penalty_init=-1.0):
     # [!Geometry]
     mp = gs.core.gsMultiPatch()
     file = gs.io.gsFileData(path_geo + ".xml")
@@ -74,7 +81,8 @@ def create_biharmonic_bvp(path_geo, loop, deg, reg, path_bvp):
     opt.addInt("refinementLoop", "Number of Uniform h-refinement loops.", loop)
     opt.addInt("discreteDegree", "Number of degree elevation steps to perform before solving (Degree 3 == 0).", deg)
     opt.addInt("discreteRegularity", "Number of degree elevation steps to perform before solving (Degree 3 == 0)", reg)
-    opt.addSwitch("nitsche", "Compute the Nitsche's method.", False)
+    opt.addInt("smoothing", "Which method should we use? (0 = Approx C1, 1 = Nitsche, 2 = DPatch)", method.value)
+    opt.addReal("penalty", "Fixed Penalty value for Nitsche's method", penalty_init);
     # [!Option list]
 
     # [!Save the data to the XML-file]
@@ -90,22 +98,34 @@ def create_biharmonic_bvp(path_geo, loop, deg, reg, path_bvp):
 
 
 ''' ####### USER INPUT ####### '''
-geo_list = ["g1000", "g1100","g1121", "g1021", "g1311", "g1601"]  # Without .xml extension
+geo_list = ["g1000", "g1100"]  # Without .xml extension
 path_geo = "planar/geometries/"
 
 deg_list = [3, 4, 5]
 loop = 4
 
+method = Method.DPatch
+penalty_init = -1.0
+
 xml_col = "XmlCollection_input"  # Without .xml extension
 path_xml = "results/XmlCollection/"
 ''' ##### USER INPUT END ##### '''
+
+m_str = ""
+if method == Method.ApproxC1:
+    m_str = "approxC1"
+elif method == Method.Nitsche:
+    m_str = "nitsche"
+elif method == Method.DPatch:
+    m_str = "dPatch"
 
 file = gs.io.gsXmlCollection(path_xml + xml_col + ".xml")
 for geo in geo_list:
     for deg in deg_list:
         reg = deg - 1
-        path_bvp = "results/" + geo + "/bvp/" + "approxC1-bvp1-p" + str(deg) + "-r" + str(reg) + "-l" + str(loop)
-        create_biharmonic_bvp(path_geo=path_geo + geo, loop=loop, deg=deg, reg=reg, path_bvp=path_bvp)
+        path_bvp = "results/" + geo + "/bvp/" + m_str + "-bvp1-p" + str(deg) + "-r" + str(reg) + "-l" + str(loop)
+        create_biharmonic_bvp(path_geo=path_geo + geo, loop=loop, deg=deg, reg=reg, path_bvp=path_bvp, method=method,
+                              penalty_init=penalty_init)
         file.addFile(path_bvp + ".xml")
 
 file.save()

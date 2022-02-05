@@ -21,28 +21,42 @@ print("G+Smo path:", gismo_path, "(change if needed).")
 sys.path.append(gismo_path)
 
 import pygismo as gs
-import numpy as np
 
 from python2latex.python2latex import MyDocument
 from python2latex.python2tikz import MyTikz
 
 ''' Set the xml_collection path name '''
-xml_collection = "results/XmlCollection/XmlCollection_output.xml"
-max_id = 2
+xml_collection1 = "results/XmlCollection/XmlCollection_approxC1_output.xml"
+xml_collection2 = "results/XmlCollection/XmlCollection_nitsche_output.xml"
+xml_collection3 = "results/XmlCollection/XmlCollection_dPatch_output.xml"
+id_range = [6,18]
+
+xml_col_list = [xml_collection1, xml_collection2]
 
 path_tikz = "tikz_results/"
 path_fig = "figure_results/"
 
-file = gs.io.gsXmlCollection("")
-file.load(xml_collection)
+file1 = gs.io.gsXmlCollection("")
+file1.load(xml_collection1)
+
+file2 = gs.io.gsXmlCollection("")
+file2.load(xml_collection2)
+
+if len(xml_col_list) == 3:
+    file3 = gs.io.gsXmlCollection("")
+    file3.load(xml_collection3)
 
 list_dict = []
 
-for id in range(max_id):
-    my_dict = {"Matrix": None, "Deg": None, "Reg": None, "Geo": None, "Name": None}
+for id in range(id_range[0],id_range[1],1):
+    if len(xml_col_list) == 2:
+        my_dict = {"Matrix": file1.getMatrix(id), "Matrix2": file2.getMatrix(id), "Deg": None, "Reg": None, "Geo": None,
+                   "Name": None}
+    elif len(xml_col_list) == 3:
+        my_dict = {"Matrix": file1.getMatrix(id), "Matrix2": file2.getMatrix(id), "Matrix3": file3.getMatrix(id), "Deg": None, "Reg": None, "Geo": None,
+               "Name": None}
 
-    my_dict["Matrix"] = file.getMatrix(id)
-    path_name = file.getString(id)
+    path_name = file1.getString(id)
     name = path_name[path_name.find('/results/') + 9:]
     name = name[:name.find('.xml')]
 
@@ -52,16 +66,26 @@ for id in range(max_id):
     my_dict["Geo"] = geo
     my_dict["Deg"] = deg
     my_dict["Reg"] = reg
-    my_dict["Name"] = name
+    my_dict["Name"] = "approxC1_vs_nitsche"
 
     list_dict.append(my_dict)
 
 list_tikz = []
 for dict in list_dict:
     matrix = dict["Matrix"]
+    matrix2 = dict["Matrix2"]
+    if len(xml_col_list) == 3:
+        matrix3 = dict["Matrix3"]
 
-    x = matrix[:, 0]  # Mesh size
+    x_col = 0
+    x = [matrix[:, x_col]]  # Mesh size
     M = matrix[:, 2:5]  # L2 Error + H1 Error + H2 Error
+    N = matrix2[:, 2:5]  # L2 Error + H1 Error + H2 Error
+    if len(xml_col_list) == 3:
+        O = matrix3[:, 2:5]  # L2 Error + H1 Error + H2 Error
+
+    x.append(matrix2[:,x_col])
+    #x.append(matrix3[:,x_col])
 
     '''Computing the rates'''
     # l2error = M[:,0]
@@ -81,10 +105,13 @@ for dict in list_dict:
     fig.setOptions(opt_axis)
     color_list = ["red", "green", "blue", "yellow"]
     fig.setColor(color_list)
-    fig.create_error_plot(x, M)
-    fig.generate_tikz(path_tikz + dict["Geo"] + "-" + dict["Name"])
+    if len(xml_col_list) == 2:
+        fig.create_error_plot(x, M, N)
+    if len(xml_col_list) == 3:
+        fig.create_error_plot(x, M, N, O)
+    fig.generate_tikz(path_tikz + dict["Geo"] + "-" + dict["Name"] + "-" + dict["Deg"] + "-" + dict["Reg"])
 
-    list_tikz.append(dict["Geo"] + "-" + dict["Name"])
+    list_tikz.append(dict["Geo"] + "-" + dict["Name"] + "-" + dict["Deg"] + "-" + dict["Reg"])
 
 doc = MyDocument()
 doc.addTikzFigure(list_tikz, row=4)

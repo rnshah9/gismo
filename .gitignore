@@ -26,3 +26,7 @@ CMakeFiles/
 # Patch Files
 *.patch
 *.rej
+
+# Pascal
+python_examples/tikz_figures/*
+python_examples/tikz_results/*

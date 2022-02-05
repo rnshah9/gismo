@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--This file was created by G+Smo 21.12.0-->
+<xml>
+ <string id="0">results/g1000/results/dPatch-bvp1-p3-r2-l4-result.xml</string>
+ <string id="2">results/g1000/results/dPatch-bvp1-p4-r3-l4-result.xml</string>
+ <string id="4">results/g1000/results/dPatch-bvp1-p5-r4-l4-result.xml</string>
+ <string id="1">results/g1100/results/dPatch-bvp1-p3-r2-l4-result.xml</string>
+ <string id="3">results/g1100/results/dPatch-bvp1-p4-r3-l4-result.xml</string>
+ <string id="5">results/g1100/results/dPatch-bvp1-p5-r4-l4-result.xml</string>
+</xml>
+
