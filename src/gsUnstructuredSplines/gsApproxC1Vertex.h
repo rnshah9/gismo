@@ -216,6 +216,8 @@ public:
                     }
             }
             collection.save();
+            //if (m_patchesAroundVertex.size() == 2)
+            //    gsWriteParaview(basisVertexResult[0], "vertex_basis", 20000);
         }
     }
 

@@ -84,6 +84,8 @@ public:
                 collection.addTimestep(fileName, i, "0.vts");
             }
             collection.save();
+
+            //gsWriteParaview(basisEdgeResult[0], "interface_basis", 20000);
         }
     }
 
