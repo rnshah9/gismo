@@ -399,9 +399,7 @@ public:
     void eval_into(const gsMatrix<T>& u, gsMatrix<T>& result) const
     {
         result.resize( targetDim() , u.cols() );
-
         result.setZero();
-
 
         // Computing the basis functions at the vertex
         gsMatrix<T> Phi(6,6);
@@ -429,12 +427,14 @@ public:
             gsMatrix<> b_0_plus_deriv, b_1_plus_deriv, b_2_plus_deriv;
             gsMatrix<> b_0_minus, b_1_minus;
 
-            gsBSplineBasis<T> bsp_temp = dynamic_cast<gsBSplineBasis<> & >(m_basis.component(1-i));
-            real_t p = bsp_temp.degree();
-            real_t h_geo = bsp_temp.knots().at(p + 1);
+            //gsBSplineBasis<T> bsp_temp = dynamic_cast<gsBSplineBasis<> & >(m_basis.component(i));
+            //gsBSplineBasis<T> bsp_temp_2 = dynamic_cast<gsBSplineBasis<> & >(m_basis.component(i));
+            //real_t p = bsp_temp.degree();
+            //real_t h_geo = bsp_temp.knots().at(p + 1);
+            //real_t h_geo_2 = bsp_temp_2.knots().at(p + 1);
 
-            m_basis.component(1-i).evalSingle_into(0, u.row(i),b_0); // first
-            m_basis.component(1-i).evalSingle_into(1, u.row(i),b_1); // second
+            m_basis.component(i).evalSingle_into(0, u.row(i),b_0); // first
+            m_basis.component(i).evalSingle_into(1, u.row(i),b_1); // second
 
             m_basis_plus[i].evalSingle_into(0, u.row(i),b_0_plus);
             m_basis_plus[i].evalSingle_into(1, u.row(i),b_1_plus);
@@ -447,20 +447,26 @@ public:
             m_basis_minus[i].evalSingle_into(0, u.row(i),b_0_minus);
             m_basis_minus[i].evalSingle_into(1, u.row(i),b_1_minus);
 
-            c_0.push_back(b_0 + b_1);
-            c_1.push_back((h_geo / p) * b_1);
+            gsMatrix<T> b_1_0, b_1_minus_0;
+            m_basis.component(i).derivSingle_into(1, zero.row(i),b_1_0);
+            m_basis_minus[i].derivSingle_into(1, zero.row(i),b_1_minus_0);
 
+            real_t factor_b_1 = 1.0/b_1_0(0,0);
+            c_0.push_back(b_0 + b_1);
+            c_1.push_back(factor_b_1 * b_1);
+
+            real_t factor_b_1_minus = 1.0/b_1_minus_0(0,0);
             c_0_minus.push_back(b_0_minus + b_1_minus);
-            c_1_minus.push_back(h_geo/ (p-1) * b_1_minus);
+            c_1_minus.push_back(factor_b_1_minus * b_1_minus);
 
             gsMatrix<T> der_b_1_plus_0, der2_b_1_plus_0, der2_b_2_plus_0;
             m_basis_plus[i].derivSingle_into(1, zero.row(i), der_b_1_plus_0);
             m_basis_plus[i].deriv2Single_into(1, zero.row(i), der2_b_1_plus_0);
             m_basis_plus[i].deriv2Single_into(2, zero.row(i), der2_b_2_plus_0);
 
-            real_t factor_c_1_plus = 1/der_b_1_plus_0(0,0);
+            real_t factor_c_1_plus = 1.0/der_b_1_plus_0(0,0);
             real_t factor2_c_1_plus = -der2_b_1_plus_0(0,0)/(der_b_1_plus_0(0,0)*der2_b_2_plus_0(0,0));
-            real_t factor_c_2_plus = 1/der2_b_2_plus_0(0,0);
+            real_t factor_c_2_plus = 1.0/der2_b_2_plus_0(0,0);
 
             c_0_plus.push_back(b_0_plus + b_1_plus + b_2_plus);
             c_1_plus.push_back(factor_c_1_plus * b_1_plus + factor2_c_1_plus * b_2_plus);
@@ -472,7 +478,6 @@ public:
         }
 
         std::vector<gsMatrix<T>> alpha, beta, alpha_0, beta_0, alpha_deriv, beta_deriv;
-
         gsMatrix < T > temp_mat;
         if (m_kindOfEdge[0])
         {
@@ -514,8 +519,6 @@ public:
             temp_mat.setZero(1, zero.cols());
             beta_deriv.push_back(temp_mat); // u
         }
-
-
 
         if (m_kindOfEdge[1]) {
             m_alpha[1].eval_into(u.row(1), temp_mat); // 1-dir == PatchID
@@ -564,10 +567,10 @@ public:
         // Compute dd^^(i_k) and dd^^(i_k-1)
         gsMatrix<T> dd_ik_plus, dd_ik_minus;
         gsMatrix<T> dd_ik_minus_deriv, dd_ik_plus_deriv;
-        dd_ik_minus = -1/(alpha_0[0](0,0)) * (geo_jac.col(1) +
+        dd_ik_minus = -1.0/(alpha_0[0](0,0)) * (geo_jac.col(1) +
                                               beta_0[0](0,0) * geo_jac.col(0));
 
-        dd_ik_plus = 1/(alpha_0[1](0,0)) * (geo_jac.col(0) +
+        dd_ik_plus = 1.0/(alpha_0[1](0,0)) * (geo_jac.col(0) +
                                             beta_0[1](0,0) * geo_jac.col(1));
 
         gsMatrix<T> geo_deriv2_12(2,1), geo_deriv2_11(2,1), geo_deriv2_22(2,1);
@@ -580,13 +583,13 @@ public:
         gsMatrix<T> alpha_squared_u = alpha_0[0]*alpha_0[0];
         gsMatrix<T> alpha_squared_v = alpha_0[1]*alpha_0[1];
 
-        dd_ik_minus_deriv = -1/(alpha_squared_u(0,0)) * // N^2
+        dd_ik_minus_deriv = -1.0/(alpha_squared_u(0,0)) * // N^2
                             ((geo_deriv2_12 + (beta_deriv[0](0,0) * geo_jac.col(0) +
                                                beta_0[0](0,0) * geo_deriv2_11))*alpha_0[0](0,0) -
                              (geo_jac.col(1) + beta_0[0](0,0) * geo_jac.col(0)) *
                              alpha_deriv[0](0,0));
 
-        dd_ik_plus_deriv = 1/(alpha_squared_v(0,0)) *
+        dd_ik_plus_deriv = 1.0/(alpha_squared_v(0,0)) *
                            ((geo_deriv2_12 + (beta_deriv[1](0,0) * geo_jac.col(1) +
                                               beta_0[1](0,0) * geo_deriv2_22))*alpha_0[1](0,0) -
                             (geo_jac.col(0) + beta_0[1](0,0) * geo_jac.col(1)) *

@@ -77,7 +77,7 @@ print(f"Evaluation of the Function on {u[0]}:\n", f.eval(u))
 #References to matrices can get invalidated
 print("--- Updating a referenced array works")
 c=b.coefs()
-c[0,0]= 2.0
+c[0,0]= 1.0
 print("Matrix (g+smo):\n", b.coefs())
 print("Matrix (ndarray):\n", c)
 print("shape:", c.shape)

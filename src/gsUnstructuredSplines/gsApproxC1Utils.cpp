@@ -35,17 +35,15 @@ namespace gismo
         for (size_t i = 1; i < unique_geo.size()-1; i++) // First and last are ignored
         {
             real_t knot_geo = unique_geo.at(i);
-            index_t r_geo = p_geo - kv_geo.multiplicities().at(i);
+            index_t r_geo = p_geo - kv_geo.multiplicities().at(i) - 1;
             //index_t p_basis = kv_gluingData.degree();
             //index_t r_basis = p_basis - kv_gluingData.multiplicities().at(kv_gluingData.uFind(knot_geo).uIndex());
             if (r_tilde > r_geo)
                 kv_gluingData.insert(knot_geo, r_tilde-r_geo);
-            else if (r_tilde < r_geo)
+            else if (r_tilde < r_geo && r_tilde != 1)
                 kv_gluingData.remove(knot_geo, r_geo-r_tilde);
         }
-
         result = gsBSplineBasis<real_t>(kv_gluingData); // S(\tilde{p},\tilde{r},h)
-
     }
 
     void createPlusSpace(const gsGeometry<real_t> & patch, gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & result)

@@ -63,7 +63,7 @@ namespace gismo
 
             gsBSplineBasis<T> basis_plus, basis_minus;
 
-            gsMultiBasis<T> initSpace(m_auxPatches[patchID].getBasisRotated().piece(9));
+            gsMultiBasis<T> initSpace(m_auxPatches[patchID].getBasisRotated().piece(0));
             createPlusSpace(m_auxPatches[0].getPatchRotated(), initSpace.basis(0), dir, basis_plus);
             createMinusSpace(m_auxPatches[0].getPatchRotated(), initSpace.basis(0), dir, basis_minus);
 

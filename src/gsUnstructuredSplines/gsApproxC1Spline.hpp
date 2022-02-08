@@ -27,6 +27,7 @@ void gsApproxC1Spline<d,T>::defaultOptions()
     /*
         to do: general
     */
+    gsDebugVar(m_multiBasis.basis(0));
     gsTensorBSplineBasis<d, T> basis = dynamic_cast<gsTensorBSplineBasis<d, T> &>(m_multiBasis.basis(0));
     index_t p = basis.degree(0);
 
@@ -56,7 +57,7 @@ void gsApproxC1Spline<d,T>::init()
         // - Edge spaces:    [1] : west, [2] : east, [3] : south, [4] : north,
         // - Vertex spaces:  [5] : southwest, [6] : southeast, [7] : northwest, [8] : northeast
         // [9] For the initial space, maybe delete later
-        gsContainerBasis<d,T> containerBasis(10); // for 9 subspaces
+        gsContainerBasis<d,T> containerBasis(9); // for 9 subspaces
         m_bases.push_back(containerBasis);
     }
 
@@ -64,7 +65,7 @@ void gsApproxC1Spline<d,T>::init()
     for (size_t np = 0; np < m_patches.nPatches(); np++)
     {
         gsTensorBSplineBasis<d, T> basis_inner = dynamic_cast<gsTensorBSplineBasis<d, T> &>(m_multiBasis.basis(np));
-        m_bases[np].setBasis(9, basis_inner); // Inner
+        //m_bases[np].setBasis(9, basis_inner); // Inner
 
         // Construct special space for r = p - 1:
         // The first and the last knot (not 0,1) are repeated +1, e.g.

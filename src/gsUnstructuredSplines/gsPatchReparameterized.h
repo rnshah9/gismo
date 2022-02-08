@@ -47,6 +47,12 @@ public:
         index_t dimU = temp_L.size(0);
         index_t dimV = temp_L.size(1);
 
+        gsBasis<real_t> & temp_L_basis = m_patchRotated.basis(0);
+        gsDebugVar(temp_L_basis.component(0).size());
+        gsDebugVar(temp_L_basis.component(1).size());
+        gsDebugVar(dimU);
+        gsDebugVar(dimV);
+
         // The number of cols has to match the dimension of the space
         gsMatrix<> mpar(dimU * dimV, m_patchRotated.targetDim());
         for (index_t j = 0; j < dimU; j++)
@@ -84,6 +90,13 @@ public:
         gsBSplineBasis<> temp_basisLV = dynamic_cast<gsBSplineBasis<> &>(temp_L.component(1));
         index_t dimU = temp_L.size(0);
         index_t dimV = temp_L.size(1);
+
+
+        gsBasis<real_t> & temp_L_basis = m_patchRotated.basis(0);
+        gsDebugVar(temp_L_basis.component(0).size());
+        gsDebugVar(temp_L_basis.component(1).size());
+        gsDebugVar(dimU);
+        gsDebugVar(dimV);
 
         // The number of cols has to match the dimension of the space
         gsMatrix<> mpar(dimU * dimV, m_patchRotated.targetDim());
@@ -136,6 +149,12 @@ public:
         gsBSplineBasis<> temp_basisLV = dynamic_cast<gsBSplineBasis<> &>(temp_L.component(1));
         index_t dimU = temp_L.size(0);
         index_t dimV = temp_L.size(1);
+
+        gsBasis<real_t> & temp_L_basis = m_patchRotated.basis(0);
+        gsDebugVar(temp_L_basis.component(0).size());
+        gsDebugVar(temp_L_basis.component(1).size());
+        gsDebugVar(dimU);
+        gsDebugVar(dimV);
 
         // The number of cols has to match the dimension of the space
         gsMatrix<> mpar(dimU * dimV, m_patchRotated.targetDim());

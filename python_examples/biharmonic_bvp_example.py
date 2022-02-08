@@ -31,7 +31,7 @@ class Method(Enum):
     DPatch = 2
 
 
-def create_biharmonic_bvp(path_geo, loop, deg, reg, path_bvp, method, penalty_init=-1.0):
+def create_biharmonic_bvp(path_geo, loop, deg, reg, path_bvp, method, penalty_init=-1.0, cond=False):
     # [!Geometry]
     mp = gs.core.gsMultiPatch()
     file = gs.io.gsFileData(path_geo + ".xml")
@@ -78,6 +78,7 @@ def create_biharmonic_bvp(path_geo, loop, deg, reg, path_bvp, method, penalty_in
     opt = gs.io.gsOptionList()
     opt.addSwitch("plot", "Plotting the results.", False)
     opt.addSwitch("info", "Plotting the results.", False)
+    opt.addSwitch("cond","Estimate condition number (slow!)", cond)
     opt.addInt("refinementLoop", "Number of Uniform h-refinement loops.", loop)
     opt.addInt("discreteDegree", "Number of degree elevation steps to perform before solving (Degree 3 == 0).", deg)
     opt.addInt("discreteRegularity", "Number of degree elevation steps to perform before solving (Degree 3 == 0)", reg)
@@ -98,14 +99,17 @@ def create_biharmonic_bvp(path_geo, loop, deg, reg, path_bvp, method, penalty_in
 
 
 ''' ####### USER INPUT ####### '''
-geo_list = ["g1000", "g1100"]  # Without .xml extension
+geo_list = ["g1400", "g1100"]  # Without .xml extension
 path_geo = "planar/geometries/"
 
 deg_list = [3, 4, 5]
 loop = 4
 
-method = Method.DPatch
+method = Method.Nitsche
 penalty_init = -1.0
+
+# Condition number
+cond = True
 
 xml_col = "XmlCollection_input"  # Without .xml extension
 path_xml = "results/XmlCollection/"
@@ -125,7 +129,7 @@ for geo in geo_list:
         reg = deg - 1
         path_bvp = "results/" + geo + "/bvp/" + m_str + "-bvp1-p" + str(deg) + "-r" + str(reg) + "-l" + str(loop)
         create_biharmonic_bvp(path_geo=path_geo + geo, loop=loop, deg=deg, reg=reg, path_bvp=path_bvp, method=method,
-                              penalty_init=penalty_init)
+                              penalty_init=penalty_init, cond=cond)
         file.addFile(path_bvp + ".xml")
 
 file.save()

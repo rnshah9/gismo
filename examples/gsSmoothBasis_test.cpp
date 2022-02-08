@@ -14,7 +14,7 @@
 #include <gismo.h>
 
 #include <gsUnstructuredSplines/gsMPBESBasis.h>
-#include <gsUnstructuredSplines/gsMPBESGeom.h>
+//#include <gsUnstructuredSplines/gsMPBESGeom.h>
 
 #include <gsUnstructuredSplines/gsDPatch.h>
 
@@ -239,21 +239,24 @@ int main(int argc, char *argv[])
         time.restart();
         if (smoothing==0)
         {
-            gsMPBESSpline<2,real_t> cgeom(mp,3);
+/*            gsMPBESSpline<2,real_t> cgeom(mp,3);
             gsMappedBasis<2,real_t> basis = cgeom.getMappedBasis();
 
             global2local = basis.getMapper().asMatrix();
             geom = cgeom.exportToPatches();
             auto container = basis.getBasesCopy();
-            mb = gsMultiBasis<>(container,mp.topology());
+            mb = gsMultiBasis<>(container,mp.topology());*/
         }
         else if (smoothing==1)
         {
+            gsDebugVar(mp.patch(0));
             gsDPatch<2,real_t> dpatch(mp);
             dpatch.matrix_into(global2local);
             global2local = global2local.transpose();
             geom = dpatch.exportToPatches();
             mb = dpatch.localBasis();
+            gsDebugVar(geom.patch(0));
+            gsDebugVar(mp.patch(0));
         }
         else
             GISMO_ERROR("Option "<<smoothing<<" for smoothing does not exist");
@@ -306,40 +309,6 @@ int main(int argc, char *argv[])
         mb = gsMultiBasis<>(mp);
     }
     //! [Solver loop]
-
-    gsDofMapper mapper = u.mapper();
-    gsMatrix<> m_ddofs = u.fixedPart();
-    const index_t dim = u.dim();
-    gsMatrix<> cc(bb2.size(),dim);
-    cc.setZero();
-    for ( size_t p =0; p!=mapper.numPatches(); ++p) // Deform the geometry
-    {
-        for (index_t c = 0; c!=dim; c++) // for all components
-        {
-            gsDebugVar(p);
-            gsDebugVar(c);
-            gsDebugVar(bb2.size(p));
-            gsDebugVar(bb2.localSize(p));
-            gsDebugVar(mapper.size(p));
-            gsDebugVar(mapper.patchSize(p,c));
-            // loop over all basis functions (even the eliminated ones)
-            for (index_t i = 0; i < mapper.patchSize(p,c); ++i)
-            {
-                const int ii = mapper.index(i, p, c);
-                if ( mapper.is_free_index(ii) ) // DoF value is in the solVector
-                    cc(i,c) = sVector.at(ii);
-                else // eliminated DoF: fill with Dirichlet data
-                {
-                    cc(i,c) =  m_ddofs.at( mapper.global_to_bindex(ii) );
-                }
-            }
-
-        }
-        gsDebugVar(cc);
-        gsMatrix<> tmp;
-
-    }
-
 
     gsInfo<< "\n\nCG it.: "<<CGiter.transpose()<<"\n";
 

@@ -24,8 +24,9 @@ using namespace gismo;
 
 /**
  * Smoothing method:
- * - 0 == Approx C1 method
- * - 1 == Nitsche's method
+ * - s 0 == Approx C1 method
+ * - s 1 == Nitsche's method
+ * - s 2 == D-Patch's method
  */
 enum MethodFlags
 {
@@ -55,18 +56,44 @@ void setMapperForBiharmonic(gsBoundaryConditions<> & bc, gsMappedBasis<2,real_t>
         bnd = bb2.basis(it->ps.patch).boundaryOffset(it->ps.side(),1);
         mapper.markBoundary(it->ps.patch, bnd, 0);
     }
-
     mapper.finalize();
 }
 
-void gsDirichletNeumannValuesL2Projection2(gsMultiPatch<> & mp, gsMultiBasis<> & dbasis, gsBoundaryConditions<> & bc,
+void setMapperForBiharmonic(gsBoundaryConditions<> & bc, gsMultiBasis<> & dbasis, gsDofMapper & mapper)
+{
+    mapper.init(dbasis);
+
+    for (gsBoxTopology::const_iiterator it = dbasis.topology().iBegin();
+         it != dbasis.topology().iEnd(); ++it) // C^0 at the interface
+    {
+        dbasis.matchInterface(*it, mapper);
+    }
+
+    gsMatrix<index_t> bnd;
+    for (typename gsBoundaryConditions<real_t>::const_iterator
+                 it = bc.begin("Dirichlet"); it != bc.end("Dirichlet"); ++it)
+    {
+        bnd = dbasis.basis(it->ps.patch).boundary(it->ps.side());
+        mapper.markBoundary(it->ps.patch, bnd, 0);
+    }
+
+    for (typename gsBoundaryConditions<real_t>::const_iterator
+                 it = bc.begin("Neumann"); it != bc.end("Neumann"); ++it)
+    {
+        bnd = dbasis.basis(it->ps.patch).boundaryOffset(it->ps.side(),1);
+        mapper.markBoundary(it->ps.patch, bnd, 0);
+    }
+    mapper.finalize();
+}
+
+void gsDirichletNeumannValuesL2Projection(gsMultiPatch<> & mp, gsMultiBasis<> & dbasis, gsBoundaryConditions<> & bc,
                                            gsMappedBasis<2,real_t> & bb2, const expr::gsFeSpace<real_t> & u)
 {
     gsDofMapper mapper = u.mapper();
 
     gsMatrix<index_t> bnd = mapper.findFree(mapper.numPatches()-1);
     gsDofMapper mapperBdy;
-    mapperBdy.setIdentity(bb2.nPatches(), bb2.size(), 1);
+    mapperBdy.setIdentity(bb2.nPatches(), bb2.size(), 1);  // bb2.nPatches() == 1
     mapperBdy.markBoundary(0, bnd, 0);
     mapperBdy.finalize();
 
@@ -97,6 +124,64 @@ void gsDirichletNeumannValuesL2Projection2(gsMultiPatch<> & mp, gsMultiBasis<> &
     fixedDofs = solver.solve(A.rhs());
 }
 
+void gsDirichletNeumannValuesL2Projection(gsMultiPatch<> & mp, gsMultiBasis<> & dbasis, gsBoundaryConditions<> & bc, const expr::gsFeSpace<real_t> & u)
+{
+    gsDofMapper mapper = u.mapper();
+    gsDofMapper mapperBdy(dbasis, u.dim());
+    for (gsBoxTopology::const_iiterator it = dbasis.topology().iBegin();
+         it != dbasis.topology().iEnd(); ++it) // C^0 at the interface
+    {
+        dbasis.matchInterface(*it, mapperBdy);
+    }
+    for (size_t np = 0; np < mp.nPatches(); np++)
+    {
+        gsMatrix<index_t> bnd = mapper.findFree(np);
+        mapperBdy.markBoundary(np, bnd, 0);
+    }
+    mapperBdy.finalize();
+
+    gsExprAssembler<real_t> A(1,1);
+    A.setIntegrationElements(dbasis);
+
+    auto G = A.getMap(mp);
+    auto uu = A.getSpace(dbasis);
+    auto g_bdy = A.getBdrFunction(G);
+
+    uu.setupMapper(mapperBdy);
+    gsMatrix<real_t> & fixedDofs_A = const_cast<expr::gsFeSpace<real_t>&>(uu).fixedPart();
+    fixedDofs_A.setZero( uu.mapper().boundarySize(), 1 );
+
+    real_t lambda = 1e-5;
+
+    A.initSystem();
+    A.assembleBdr(bc.get("Dirichlet"), uu * uu.tr() * meas(G));
+    A.assembleBdr(bc.get("Dirichlet"), uu * g_bdy * meas(G));
+    A.assembleBdr(bc.get("Neumann"),
+                  lambda * (igrad(uu, G) * nv(G).normalized()) * (igrad(uu, G) * nv(G).normalized()).tr() * meas(G));
+    A.assembleBdr(bc.get("Neumann"),
+                  lambda *  (igrad(uu, G) * nv(G).normalized()) * (g_bdy.tr() * nv(G).normalized()) * meas(G));
+
+    gsSparseSolver<real_t>::SimplicialLDLT solver;
+    solver.compute( A.matrix() );
+    gsMatrix<real_t> & fixedDofs = const_cast<expr::gsFeSpace<real_t>& >(u).fixedPart();
+    gsMatrix<real_t> fixedDofs_temp = solver.solve(A.rhs());
+
+    // Reordering the dofs of the boundary
+    fixedDofs.setZero(mapper.boundarySize(),1);
+    index_t sz = 0;
+    for (size_t np = 0; np < mp.nPatches(); np++)
+    {
+        gsMatrix<index_t> bnd = mapperBdy.findFree(np);
+        bnd.array() += sz;
+        for (index_t i = 0; i < bnd.rows(); i++)
+        {
+            index_t ii = mapperBdy.asVector()(bnd(i,0));
+            fixedDofs(mapper.global_to_bindex(mapper.asVector()(bnd(i,0))),0) = fixedDofs_temp(ii,0);
+        }
+        sz += mapperBdy.patchSize(np,0);
+    }
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -111,6 +196,7 @@ int main(int argc, char *argv[])
     bool last = false;
     bool info = false;
     bool neumann = false;
+    bool cond = false;
     real_t penalty_init = -1.0;
     std::string xml;
     std::string output;
@@ -132,6 +218,7 @@ int main(int argc, char *argv[])
     cmd.addSwitch("last", "Solve solely for the last level of h-refinement", last);
     cmd.addSwitch("plot", "Create a ParaView visualization file with the solution", plot);
     cmd.addSwitch("info", "Getting the information inside of Approximate C1 basis functions", info);
+    cmd.addSwitch("cond","Estimate condition number (slow!)", cond);
 
     cmd.addSwitch("neumann", "Neumann", neumann);
 
@@ -239,18 +326,22 @@ int main(int argc, char *argv[])
 
     penalty_init = optionList.getReal("penalty");
 
+    cond = optionList.getSwitch("cond");
     plot = optionList.getSwitch("plot");
     info = optionList.getSwitch("info");
     //! [Read option list]
 
     //! [Refinement]
-    gsMultiBasis<real_t> dbasis(mp, false);//true: poly-splines (not NURBS)
+    gsMultiBasis<real_t> dbasis(mp, true);//true: poly-splines (not NURBS)
 
     // Elevate and p-refine the basis to order p + numElevate
     // where p is the highest degree in the bases
     dbasis.setDegree( discreteDegree); // preserve smoothness
+    //dbasis.degreeElevate(discreteDegree- mp.patch(0).degree(0));
+
     if (smoothing == MethodFlags::DPATCH)
         mp.degreeElevate(discreteDegree- mp.patch(0).degree(0));
+
 
     // h-refine each basis
     if (last)
@@ -268,7 +359,7 @@ int main(int argc, char *argv[])
         if (smoothing == MethodFlags::DPATCH)
             mp.uniformRefine(1, discreteDegree-discreteRegularity);
     }
-
+    gsWriteParaview(mp, "geometry", 2000);
     gsInfo << "Patches: "<< mp.nPatches() <<", degree: "<< dbasis.minCwiseDegree() <<"\n";
 #ifdef _OPENMP
     gsInfo<< "Available threads: "<< omp_get_max_threads() <<"\n";
@@ -306,18 +397,16 @@ int main(int argc, char *argv[])
     auto u_ex = ev.getVariable(ms, G);
     //! [Problem setup]
 
-
     //! [Solver loop]
     gsVector<real_t> l2err(numRefine+1), h1err(numRefine+1), h2err(numRefine+1),
-    IFaceErr(numRefine+1), meshsize(numRefine+1), dofs(numRefine+1), penalty(numRefine+1);
+            IFaceErr(numRefine+1), meshsize(numRefine+1), dofs(numRefine+1),
+            cond_num(numRefine+1), penalty(numRefine+1);
     gsInfo<< "(dot1=approxC1construction, dot2=assembled, dot3=solved, dot4=got_error)\n"
         "\nDoFs: ";
     double setup_time(0), ma_time(0), slv_time(0), err_time(0);
     gsStopwatch timer;
     for (int r=0; r<=numRefine; ++r)
     {
-
-
         if (smoothing == MethodFlags::APPROXC1)
         {
             dbasis.uniformRefine(1,discreteDegree -discreteRegularity);
@@ -333,7 +422,8 @@ int main(int argc, char *argv[])
         {
             mp.uniformRefine(1,discreteDegree-discreteRegularity);
             dbasis.uniformRefine(1,discreteDegree-discreteRegularity);
-            meshsize[r] = mp.basis(0).getMinCellLength();
+
+            meshsize[r] = dbasis.basis(0).getMinCellLength();
 
             gsSparseMatrix<real_t> global2local;
             gsDPatch<2,real_t> dpatch(mp);
@@ -353,18 +443,17 @@ int main(int argc, char *argv[])
 
             // Setup the system
             u.setupMapper(map);
-            gsDirichletNeumannValuesL2Projection2(mp, dbasis, bc, bb2, u);
+            gsDirichletNeumannValuesL2Projection(mp, dbasis, bc, bb2, u);
         }
         else if (smoothing == MethodFlags::NITSCHE) // Nitsche
         {
-            // Setup the system
-            u.setup(bc, dirichlet::l2Projection, 0);
-        }
+            gsDofMapper map;
+            setMapperForBiharmonic(bc, dbasis,map);
 
-        //gsMatrix<real_t> u_fixed_new = u.fixedPart();
-        //gsDirichletNeumannValuesL2Projection(u, bc); // Maybe too much memory
-        //gsDirichletValuesL2Projection(u, bc);
-        //gsInfo<< "Error " << (u.fixedPart()-u_fixed_new).norm() <<"\n";
+            // Setup the system
+            u.setupMapper(map);
+            gsDirichletNeumannValuesL2Projection(mp, dbasis, bc, u);
+        }
 
         // Initialize the system
         A.initSystem();
@@ -416,7 +505,6 @@ int main(int argc, char *argv[])
             );
         }
 
-
         ma_time += timer.stop();
         gsInfo<< "." <<std::flush;// Assemblying done
 
@@ -451,38 +539,85 @@ int main(int argc, char *argv[])
         }
         else if (smoothing == MethodFlags::NITSCHE)
         {
-            IFaceErr[r] = math::sqrt(ev.integralInterface((( igrad(u_sol.left(), G.left()) -
-                                                            igrad(u_sol.right(), G.right())) *
-                                                           nv(G.left()).normalized()).sqNorm() * meas(G.left()), mp.interfaces()));
+            gsMultiPatch<> sol_nitsche;
+            u_sol.extract(sol_nitsche);
+            auto ms_sol = A.getCoeff(sol_nitsche);
+            IFaceErr[r] = math::sqrt(ev.integralInterface((( igrad(ms_sol.left(), G.left()) -
+                                                            igrad(ms_sol.right(), G.right())) *
+                                                            nv(G).normalized()).sqNorm() * meas(G)));
+
+            // This doesn't work yet. Bug?
+            //IFaceErr[r] = math::sqrt(ev.integralInterface((( igrad(u_sol.left(), G.left()) -
+            //                                                 igrad(u_sol.right(), G.right())) *
+            //                                               nv(G).normalized()).sqNorm() * meas(G)));
         }
 
+        // Compute the condition-number for the matrix
+        if (cond)
+        {
+            //Eigen::MatrixXd mat = A.matrix().toDense().cast<double>()
+            //Eigen::SparseMatrix<double> mat = A.matrix().cast<double>();
 
-        //gsMatrix<> points(2,1);
-        //points << 1, 0.5;
-        //std::vector<gsMatrix<>> result;
-        //bb2.evalAllDers_into(0, points, 1, result);
-        //gsDebugVar(result[1].reshape(2,result[1].rows()/2));
-        //points << 0, 0.5;
-        //bb2.evalAllDers_into(1, points, 1, result);
-        //gsDebugVar(result[1].reshape(2,result[1].rows()/2));
 
-        //gsDebugVar(ev.integralInterface((igrad(u_sol.left(),G.left()) * nv(G.left()).normalized()).sqNorm() * meas(G.left())));
-        //gsDebugVar(ev.integralInterface((igrad(u_sol.right(),G.right()) * nv(G.left()).normalized()).sqNorm() * meas(G.left())));
+            //Eigen::EigenSolver<Eigen::MatrixXd> es;
+            //es.compute(mat, /* computeEigenvectors = */ false);
+            //cond_num[r] = es.eigenvalues().real().maxCoeff() / es.eigenvalues().real().minCoeff();
 
-        //gsDebugVar(ev.integralInterface((igrad(u_sol.left(),G) * nv(G).normalized()
-        //- igrad(u_sol.right(),G) * nv(G).normalized()).sqNorm() * meas(G)));
+            //Eigen::JacobiSVD<Eigen::SparseMatrix<double>> svd(mat);
+            //cond_num[r] = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size()-1);
 
-        //gsDebugVar(ev.integralInterface(((igrad(u_sol.left(),G) - igrad(u_sol.right(),G)) * nv(G).normalized()).sqNorm() * meas(G)));
+            gsConjugateGradient<> cg(A.matrix());
 
-        //gsDebugVar(ev.integralInterface(((igrad(u_sol,G.left()) - igrad(u_sol,G.right())) * nv(G).normalized()).sqNorm() * meas(G)));
-        //gsDebugVar(ev.integralInterface(((igrad(u_sol.left(),G.left()) - igrad(u_sol.right(),G.right())) * nv(G).normalized()).sqNorm() * meas(G)));
-        //gsDebugVar(ev.integralInterface(((igrad(u_sol.left(),G.left()) - igrad(u_sol.right(),G.right())) * nv(G.left()).normalized()).sqNorm() * meas(G)));
+            cg.setCalcEigenvalues(true);
 
+            gsMatrix<> rhs, result;
+            rhs.setRandom( A.matrix().rows(), 1 );
+            result.setRandom( A.matrix().rows(), 1 );
+
+            cg.solve(rhs,result);
+
+            gsMatrix<real_t> eigenvalues;
+            cg.getEigenvalues(eigenvalues);
+
+            gsInfo << eigenvalues.transpose() << "\n";
+
+            cond_num[r] = cg.getConditionNumber();
+
+            gsMatrix<> x, x2;
+            x.setRandom( A.matrix().rows(), 1 );
+
+            for(index_t i=0; i<100; ++i)
+
+            {
+                x /= x.norm();
+                x = A.matrix()*x;
+            }
+
+            real_t max_ev = x.norm();
+            gsInfo << "max_ev: " << max_ev << "\n";
+
+            x.setRandom( A.matrix().rows(), 1 );
+            x2.setZero( A.matrix().rows(), 1 );
+            gsSparseMatrix<> id(A.matrix().rows(),A.matrix().cols());
+            id.setIdentity();
+            while(abs((x.norm()-x2.norm())) > 1e-8)
+            {
+                x2 = x;
+                x /= x.norm();
+                x = ( A.matrix() - max_ev * id)*x;
+            }
+
+            real_t min_ev = max_ev - x.norm();
+            gsInfo << "min_ev: " << min_ev << "\n";
+            gsInfo << "Cond: " << max_ev/min_ev << "\n";
+            cond_num[r] = max_ev/min_ev;
+
+        }
         err_time += timer.stop();
         gsInfo<< ". " <<std::flush; // Error computations done
     } //for loop
-
     //! [Solver loop]
+
 
     timer.stop();
     gsInfo<<"\n\nTotal time: "<< setup_time+ma_time+slv_time+err_time <<"\n";
@@ -492,6 +627,7 @@ int main(int argc, char *argv[])
     gsInfo<<"     Norms: "<< err_time   <<"\n";
 
     gsInfo<< "\nMesh-size: " << meshsize.transpose() << "\n";
+    gsInfo<< "\nCondition-number: " << cond_num.transpose() << "\n";
     if (smoothing == MethodFlags::NITSCHE)
         gsInfo<< "\nStabilization: " << penalty.transpose() << "\n";
 
@@ -519,6 +655,10 @@ int main(int argc, char *argv[])
         gsInfo<<   "EoC (Iface): "<< std::fixed<<std::setprecision(2)
               <<( IFaceErr.head(numRefine).array() /
                   IFaceErr.tail(numRefine).array() ).log().transpose() / std::log(2.0) <<"\n";
+
+        gsInfo<<   "EoC (Cnum): "<< std::fixed<<std::setprecision(2)
+              <<( cond_num.tail(numRefine).array() /
+                      cond_num.head(numRefine).array() ).log().transpose() / std::log(2.0) <<"\n";
     }
     //! [Error and convergence rates]
 
@@ -533,6 +673,7 @@ int main(int argc, char *argv[])
         //ev.writeParaview( grad(s), G, "solution_grad");
         //ev.writeParaview( grad(f), G, "solution_ex_grad");
         //ev.writeParaview( (f-s), G, "error_pointwise");
+        gsWriteParaview( mp, "geom",100,true);
     }
     else
         gsInfo << "Done. No output created, re-run with --plot to get a ParaView "
@@ -542,7 +683,7 @@ int main(int argc, char *argv[])
     //! [Export data to xml]
     if (!output.empty())
     {
-        index_t cols = smoothing == MethodFlags::NITSCHE ? 7 : 6;
+        index_t cols = smoothing == MethodFlags::NITSCHE ? 8 : 7;
         gsMatrix<real_t> error_collection(l2err.rows(), cols);
         error_collection.col(0) = meshsize;
         error_collection.col(1) = dofs;
@@ -550,8 +691,9 @@ int main(int argc, char *argv[])
         error_collection.col(3) = h1err;
         error_collection.col(4) = h2err;
         error_collection.col(5) = IFaceErr;
+        error_collection.col(6) = cond_num;
         if (smoothing == MethodFlags::NITSCHE)
-            error_collection.col(6) = penalty;
+            error_collection.col(7) = penalty;
 
         gsFileData<real_t> xml_out;
         xml_out << error_collection;
@@ -563,13 +705,8 @@ int main(int argc, char *argv[])
         // [...]
         xml_out.save(output);
         gsInfo << "XML saved to " + output << "\n";
-/*        gsFileData<> test(cmdName+".xml");
-        gsMatrix<> matrix_temp;
-        test.getId(0,matrix_temp);
-        gsInfo << "Matrix: " << matrix_temp << "\n"*/;
     }
     //! [Export data to xml]
 
     return EXIT_SUCCESS;
-
 }// end main

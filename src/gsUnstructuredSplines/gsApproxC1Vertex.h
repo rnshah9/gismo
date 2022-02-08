@@ -100,7 +100,7 @@ public:
             kindOfEdge.resize(2);
 
             gsGeometry<T> & geo = auxPatchSingle[0].getPatchRotated();
-            gsMultiBasis<T> initSpace(auxPatchSingle[0].getBasisRotated().piece(9));
+            gsMultiBasis<T> initSpace(auxPatchSingle[0].getBasisRotated().piece(0));
             for (size_t dir = 0; dir < containingSides.size(); ++dir)
             {
                 index_t localdir = auxPatchSingle[0].getMapIndex(containingSides[dir].index()) < 3 ? 1 : 0;
@@ -139,7 +139,7 @@ public:
                 for (index_t i = 3*vertexSpace.basis(0).degree(dir)+1; i < vertexSpace.basis(0).component(1-dir).size(); i++) // only the first two u/v-columns are Dofs (0/1)
                 {
                     act = vertexSpace.basis(0).boundaryOffset(dir == 0 ? 3 : 1, i); // WEST
-                    map.markBoundary(0, act); // Patch 0
+                    //map.markBoundary(0, act); // Patch 0
                 }
             map.finalize();
 
@@ -174,6 +174,9 @@ public:
                 result_1.addPatch(vertexSpace.basis(0).makeGeometry(give(sol)));
             }
             //Problem setup end
+
+            if (m_patchesAroundVertex.size() == 2)
+                gsWriteParaview(result_1.patch(0), "vertex_basis", 2000);
 
             // Store temporary
             basisVertexResult.push_back(result_1);
