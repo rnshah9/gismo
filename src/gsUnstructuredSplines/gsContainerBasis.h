@@ -106,9 +106,25 @@ namespace gismo
         {
             for (size_t i=0; i< basisContainer.size(); ++i)
             {
-                gsTensorBSplineBasis<d, T> basis_temp = dynamic_cast<gsTensorBSplineBasis<d,T>&>(basisContainer[i]);
-                gsTensorBSplineBasis<d, T> newTensorBasis(basis_temp.knots(1),basis_temp.knots(0));
-                basisContainer[i] = newTensorBasis;
+                if (gsTensorBSplineBasis<d, T> * mb =
+                        dynamic_cast<gsTensorBSplineBasis<d, T> *>(&basisContainer[i]) )
+                {
+                    gsTensorBSplineBasis<d, T> basis_temp = dynamic_cast<gsTensorBSplineBasis<d,T>&>(basisContainer[i]);
+                    gsTensorBSplineBasis<d, T> newTensorBasis(basis_temp.knots(1),basis_temp.knots(0));
+                    basisContainer[i] = newTensorBasis;
+                }
+                /*
+                else if (gsTensorNurbsBasis<d, T> * mb =
+                        dynamic_cast<gsTensorNurbsBasis<d, T> *>(&basisContainer[i]) )
+                {
+                    gsTensorNurbsBasis<d, T> basis_temp = dynamic_cast<gsTensorNurbsBasis<d,T>&>(basisContainer[i]);
+                    basis_temp.swapDirections(1,0);
+                    basisContainer[i] = basis_temp;
+                }
+                */
+                else
+                    gsInfo << "Works for now just with gsTensorBSplineBasis<d, T> \n";
+
             }
         }
 

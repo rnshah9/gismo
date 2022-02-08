@@ -47,12 +47,6 @@ public:
         index_t dimU = temp_L.size(0);
         index_t dimV = temp_L.size(1);
 
-        gsBasis<real_t> & temp_L_basis = m_patchRotated.basis(0);
-        gsDebugVar(temp_L_basis.component(0).size());
-        gsDebugVar(temp_L_basis.component(1).size());
-        gsDebugVar(dimU);
-        gsDebugVar(dimV);
-
         // The number of cols has to match the dimension of the space
         gsMatrix<> mpar(dimU * dimV, m_patchRotated.targetDim());
         for (index_t j = 0; j < dimU; j++)
@@ -85,18 +79,12 @@ public:
 
 
     void rotateParamAntiClock(){
+/*
         gsTensorBSplineBasis<2, real_t> & temp_L = dynamic_cast<gsTensorBSplineBasis<2, real_t> &>(m_patchRotated.basis(0));
         gsBSplineBasis<> temp_basisLU = dynamic_cast<gsBSplineBasis<> &>(temp_L.component(0));
         gsBSplineBasis<> temp_basisLV = dynamic_cast<gsBSplineBasis<> &>(temp_L.component(1));
         index_t dimU = temp_L.size(0);
         index_t dimV = temp_L.size(1);
-
-
-        gsBasis<real_t> & temp_L_basis = m_patchRotated.basis(0);
-        gsDebugVar(temp_L_basis.component(0).size());
-        gsDebugVar(temp_L_basis.component(1).size());
-        gsDebugVar(dimU);
-        gsDebugVar(dimV);
 
         // The number of cols has to match the dimension of the space
         gsMatrix<> mpar(dimU * dimV, m_patchRotated.targetDim());
@@ -116,6 +104,57 @@ public:
         // Create a new single-patch object
         gsMultiPatch<> newpatch(newgeom1);
         m_patchRotated.swap(newpatch);
+*/
+        gsBasis<real_t> & temp_L_basis = m_patchRotated.basis(0);
+        index_t dimU = temp_L_basis.component(0).size();
+        index_t dimV = temp_L_basis.component(1).size();
+
+        // The number of cols has to match the dimension of the space
+        gsMatrix<> mpar(dimU * dimV, m_patchRotated.targetDim());
+        if (gsTensorBSplineBasis<2, real_t> * mb =
+                dynamic_cast<gsTensorBSplineBasis<2, real_t> *>(&m_patchRotated.basis(0)) )
+        {
+            for (index_t j = 0; j < dimU; j++)
+                for (index_t i = 0; i < dimV; i++)
+                    mpar.row(i + j * dimV) = m_patchRotated.patch(0).coefs().row((dimU - 1 - j) + dimU * i);
+
+            gsTensorBSplineBasis<2, real_t> & temp_L = dynamic_cast<gsTensorBSplineBasis<2, real_t> &>(m_patchRotated.basis(0));
+            temp_L.knots(0).reverse(); // For different regularity
+
+            // Create a new geometry starting from kntot vectors and the matrix of the coefficients reparametrized
+            gsTensorBSpline<2, real_t> newgeom1(temp_L.knots(1), temp_L.knots(0), mpar);
+
+            // Create a new single-patch object
+            gsMultiPatch<> newpatch(newgeom1);
+            m_patchRotated.swap(newpatch);
+        }
+        else if (gsTensorNurbsBasis<2, real_t> * mb =
+                dynamic_cast<gsTensorNurbsBasis<2, real_t> *>(&m_patchRotated.basis(0)) )
+        {
+            gsMatrix<> weight_rep(dimU * dimV, m_patchRotated.targetDim());
+            for (index_t j = (dimU - 1 ) ; j >= 0; j--)
+            {   // Loop over the rows
+                for (index_t i = 0; i < dimV; i++)
+                {
+                    mpar.row(i + j * dimV) = m_patchRotated.patch(0).coefs().row((dimU - 1 - j) + dimU * i);
+                    weight_rep.row(i + j * dimV) = mb->weights().row((dimU - 1 - j) + dimU * i);
+                }
+            }
+
+            gsTensorNurbsBasis<2, real_t> & temp_L = dynamic_cast<gsTensorNurbsBasis<2, real_t> &>(m_patchRotated.basis(0));
+            temp_L.knots(0).reverse(); // For different regularity
+
+            // Create a new geometry starting from kntot vectors and the matrix of the coefficients reparametrized
+            gsTensorNurbs<2, real_t> newgeom1(temp_L.knots(1), temp_L.knots(0), mpar, weight_rep);
+
+            // Create a new single-patch object
+            gsMultiPatch<> newpatch(newgeom1);
+            m_patchRotated.swap(newpatch);
+        }
+        else
+            gsInfo << "Only gsTensorBSplineBasis<2, real_t> and gsTensorNurbsBasis<2, real_t> are implemented \n";
+
+
 
         // BASES
         //m_basisRotated.swapAxis();
@@ -144,41 +183,68 @@ public:
 
     void rotateParamClock()
     {
+/*
         gsTensorBSplineBasis<2, real_t> & temp_L = dynamic_cast<gsTensorBSplineBasis<2, real_t> &>(m_patchRotated.basis(0));
         gsBSplineBasis<> temp_basisLU = dynamic_cast<gsBSplineBasis<> &>(temp_L.component(0));
         gsBSplineBasis<> temp_basisLV = dynamic_cast<gsBSplineBasis<> &>(temp_L.component(1));
         index_t dimU = temp_L.size(0);
         index_t dimV = temp_L.size(1);
+*/
 
         gsBasis<real_t> & temp_L_basis = m_patchRotated.basis(0);
-        gsDebugVar(temp_L_basis.component(0).size());
-        gsDebugVar(temp_L_basis.component(1).size());
-        gsDebugVar(dimU);
-        gsDebugVar(dimV);
+        index_t dimU = temp_L_basis.component(0).size();
+        index_t dimV = temp_L_basis.component(1).size();
 
         // The number of cols has to match the dimension of the space
         gsMatrix<> mpar(dimU * dimV, m_patchRotated.targetDim());
+        if (gsTensorBSplineBasis<2, real_t> * mb =
+                dynamic_cast<gsTensorBSplineBasis<2, real_t> *>(&m_patchRotated.basis(0)) )
+        {
+            for (index_t j = (dimU - 1 ) ; j >= 0; j--)
+                for (index_t i = 0; i < dimV; i++)
+                    mpar.row(i + (dimU - j - 1) * dimV) = m_patchRotated.patch(0).coefs().row((dimV * dimU  -1 - j) - dimU * i);
 
-        for (index_t j = (dimU - 1 ) ; j >= 0; j--)
-        {   // Loop over the rows
-            for (index_t i = 0; i < dimV; i++)
-            {
-                mpar.row(i + (dimU - j - 1) * dimV) = m_patchRotated.patch(0).coefs().row((dimV * dimU  -1 - j) - dimU * i);
-            }
+
+            gsTensorBSplineBasis<2, real_t> & temp_L = dynamic_cast<gsTensorBSplineBasis<2, real_t> &>(m_patchRotated.basis(0));
+            temp_L.knots(1).reverse(); // For different regularity
+
+            // Create a new geometry starting from kntot vectors and the matrix of the coefficients reparametrized
+            gsTensorBSpline<2, real_t> newgeom1(temp_L.knots(1), temp_L.knots(0), mpar);
+
+            // Create a new single-patch object
+            gsMultiPatch<> newpatch(newgeom1);
+            m_patchRotated.swap(newpatch);
         }
-        temp_basisLV.knots().reverse(); // For different regularity
+        else if (gsTensorNurbsBasis<2, real_t> * mb =
+                dynamic_cast<gsTensorNurbsBasis<2, real_t> *>(&m_patchRotated.basis(0)) )
+        {
+            gsMatrix<> weight_rep(dimU * dimV, m_patchRotated.targetDim());
+            for (index_t j = (dimU - 1 ) ; j >= 0; j--)
+            {   // Loop over the rows
+                for (index_t i = 0; i < dimV; i++)
+                {
+                    mpar.row(i + (dimU - j - 1) * dimV) = m_patchRotated.patch(0).coefs().row((dimV * dimU  -1 - j) - dimU * i);
+                    weight_rep.row(i + (dimU - j - 1) * dimV) = mb->weights().row((dimV * dimU  -1 - j) - dimU * i);
+                }
+            }
 
-        // Create a new geometry starting from kntot vectors and the matrix of the coefficients reparametrized
-        gsTensorBSpline<2, real_t> newgeom1(temp_basisLV.knots(), temp_basisLU.knots(), mpar);
+            gsTensorNurbsBasis<2, real_t> & temp_L = dynamic_cast<gsTensorNurbsBasis<2, real_t> &>(m_patchRotated.basis(0));
+            temp_L.knots(1).reverse(); // For different regularity
 
-        // Create a new single-patch object
-        gsMultiPatch<> newpatch(newgeom1);
-        m_patchRotated.swap(newpatch);
+            // Create a new geometry starting from kntot vectors and the matrix of the coefficients reparametrized
+            gsTensorNurbs<2, real_t> newgeom1(temp_L.knots(1), temp_L.knots(0), mpar, weight_rep);
+
+            // Create a new single-patch object
+            gsMultiPatch<> newpatch(newgeom1);
+            m_patchRotated.swap(newpatch);
+        }
+        else
+            gsInfo << "Only gsTensorBSplineBasis<2, real_t> and gsTensorNurbsBasis<2, real_t> are implemented \n";
+
 
         // BASES
         //m_basisRotated.swapAxis();
         m_basisRotated.basis(0).reverse();
-
 
         // Map Index
         if (getOrient() == 0)
@@ -195,7 +261,6 @@ public:
             mapIndex[2] = 3;
             mapIndex[3] = 4;
         }
-
 
         // Update the number of rotation of the axis
         rotationNum--;

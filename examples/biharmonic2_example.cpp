@@ -230,7 +230,7 @@ int main(int argc, char *argv[])
     //! [Parse command line]
 
     //! [Initialize data]
-    gsMultiPatch<real_t> mp;
+    gsMultiPatch<real_t> mp, geom;
     gsBoundaryConditions<> bc;
     gsFunctionExpr<real_t> f, ms;
     gsOptionList optionList;
@@ -375,6 +375,7 @@ int main(int argc, char *argv[])
     gsExprEvaluator<real_t> ev(A);
 
     // Set the geometry map
+    geom = mp;
     auto G = A.getMap(mp);
 
     // Set the source term
@@ -423,7 +424,22 @@ int main(int argc, char *argv[])
             mp.uniformRefine(1,discreteDegree-discreteRegularity);
             dbasis.uniformRefine(1,discreteDegree-discreteRegularity);
 
+
             meshsize[r] = dbasis.basis(0).getMinCellLength();
+
+            std::vector<patchCorner> C0_corners;
+            patchCorner corner1(0,2);
+            patchCorner corner2(2,2);
+            patchCorner corner3(3,3);
+            patchCorner corner4(4,2);
+            patchCorner corner5(1,2);
+            patchCorner corner6(2,3);
+            C0_corners.push_back(corner1);
+            C0_corners.push_back(corner2);
+            C0_corners.push_back(corner3);
+            C0_corners.push_back(corner4);
+            C0_corners.push_back(corner5);
+            C0_corners.push_back(corner6);
 
             gsSparseMatrix<real_t> global2local;
             gsDPatch<2,real_t> dpatch(mp);
@@ -432,6 +448,7 @@ int main(int argc, char *argv[])
             mp = dpatch.exportToPatches();
             dbasis = dpatch.localBasis();
             bb2.init(dbasis,global2local);
+            mp.computeTopology();
         }
         gsInfo<< "." <<std::flush; // Approx C1 construction done
 
@@ -672,13 +689,14 @@ int main(int argc, char *argv[])
         //ev.writeParaview( u_ex    , G, "solution_ex");
         //ev.writeParaview( grad(s), G, "solution_grad");
         //ev.writeParaview( grad(f), G, "solution_ex_grad");
-        //ev.writeParaview( (f-s), G, "error_pointwise");
-        gsWriteParaview( mp, "geom",100,true);
+        ev.writeParaview( (u_ex-u_sol), G, "error_pointwise");
+        gsWriteParaview( geom, "geom",100,true);
     }
     else
         gsInfo << "Done. No output created, re-run with --plot to get a ParaView "
                   "file containing the solution.\n";
     //! [Export visualization in ParaView]
+
 
     //! [Export data to xml]
     if (!output.empty())
