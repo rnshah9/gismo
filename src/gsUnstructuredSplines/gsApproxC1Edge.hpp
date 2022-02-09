@@ -26,34 +26,7 @@ namespace gismo
 
         // Compute GLuing data
         gsApproxGluingData<d, T> approxGluingData(m_auxPatches, m_optionList, sidesContainer);
-/*
-        gsMultiBasis<T> basis;
-        index_t dir;
-        if (sidesContainer.size() == 2)
-        {
-            gsMultiBasis<T> basis_11(m_auxPatches[0].getBasisRotated().piece(9));
-            gsMultiBasis<T> basis_22(m_auxPatches[1].getBasisRotated().piece(9));
-            index_t dir_1 = 1;
-            index_t dir_2 = 0;
 
-            if (basis_11.basis(0).component(dir_1).numElements() > basis_22.basis(0).component(dir_2).numElements())
-            {
-                basis = basis_22;
-                dir = dir_2;
-            }
-            else
-            {
-                basis = basis_11;
-                dir = dir_1;
-            }
-        }
-        else
-        {
-            gsMultiBasis<T> basis_11(m_auxPatches[0].getBasisRotated().piece(9));
-            basis = basis_11;
-            dir = 1;
-        }
-*/
         //! [Problem setup]
         basisEdgeResult.clear();
         for (size_t patchID = 0; patchID < sidesContainer.size(); patchID++) {
@@ -188,16 +161,12 @@ namespace gismo
         switch (temp_mp.interfaces()[0].second().side().index())
         {
             case 1:
-                //gsInfo << "Global patch: " << patch_2 << "\tLocal patch: " << temp_mp.interfaces()[0].second().patch << " not rotated\n";
                 break;
             case 4: m_auxPatches[0].rotateParamClock();
-                //gsInfo << "Global patch: " << patch_2 <<"\tLocal patch: " << temp_mp.interfaces()[0].second().patch << " rotated clockwise\n";
                 break;
             case 3: m_auxPatches[0].rotateParamAntiClock();
-                //gsInfo << "Global patch: " << patch_2 <<"\tLocal patch: " << temp_mp.interfaces()[0].second().patch << " rotated anticlockwise\n";
                 break;
             case 2: m_auxPatches[0].rotateParamAntiClockTwice();
-                //gsInfo << "Global patch: " << patch_2 <<"\tLocal patch: " << temp_mp.interfaces()[0].second().patch << " rotated twice anticlockwise\n";
                 break;
             default:
                 break;
@@ -207,16 +176,12 @@ namespace gismo
         switch (temp_mp.interfaces()[0].first().side().index())
         {
             case 3:
-                //gsInfo << "Global patch: " << patch_1 <<"\tLocal patch: " << temp_mp.interfaces()[0].first().patch << " not rotated\n";
                 break;
             case 4: m_auxPatches[1].rotateParamAntiClockTwice();
-                //gsInfo << "Global patch: " << patch_1 <<"\tLocal patch: " << temp_mp.interfaces()[0].first().patch << " rotated twice anticlockwise\n";
                 break;
             case 2: m_auxPatches[1].rotateParamAntiClock();
-                //gsInfo << "Global patch: " << patch_1 <<"\tLocal patch: " << temp_mp.interfaces()[0].first().patch << " rotated anticlockwise\n";
                 break;
             case 1: m_auxPatches[1].rotateParamClock();
-                //gsInfo << "Global patch: " << patch_1 <<"\tLocal patch: " << temp_mp.interfaces()[0].first().patch << " rotated clockwise\n";
                 break;
             default:
                 break;
@@ -234,19 +199,15 @@ namespace gismo
             switch (side)
             {
                 case 3:
-                    //gsInfo << "Global patch: " << patch_1 << " with side " << side << " not rotated\n";
                     break;
                 case 2:
                     m_auxPatches[0].rotateParamClock();
-                    //gsInfo << "Global patch: " << patch_1 << " with side " << side << " rotated clockwise\n";
                     break;
                 case 4:
                     m_auxPatches[0].rotateParamAntiClockTwice();
-                    //gsInfo << "Global patch: " << patch_1 << " with side " << side << " rotated twice anticlockwise\n";
                     break;
                 case 1:
                     m_auxPatches[0].rotateParamAntiClock();
-                    //gsInfo << "Global patch: " << patch_1 << " with side " << side << " rotated anticlockwise\n";
                     break;
             }
         }
@@ -255,19 +216,15 @@ namespace gismo
             switch (side)
             {
                 case 1:
-                    //gsInfo << "Global patch: " << patch_1 << " with side " << side << " not rotated\n";
                     break;
                 case 4:
                     m_auxPatches[0].rotateParamClock();
-                    //gsInfo << "Global patch: " << patch_1 << " with side " << side << " rotated clockwise\n";
                     break;
                 case 2:
                     m_auxPatches[0].rotateParamAntiClockTwice();
-                    //gsInfo << "Global patch: " << patch_1 << " with side " << side << " rotated twice anticlockwise\n";
                     break;
                 case 3:
                     m_auxPatches[0].rotateParamAntiClock();
-                    //gsInfo << "Global patch: " << patch_1 << " with side " << side << " rotated anticlockwise\n";
                     break;
             }
         }

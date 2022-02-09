@@ -230,7 +230,7 @@ int main(int argc, char *argv[])
     //! [Parse command line]
 
     //! [Initialize data]
-    gsMultiPatch<real_t> mp, geom;
+    gsMultiPatch<real_t> mp;
     gsBoundaryConditions<> bc;
     gsFunctionExpr<real_t> f, ms;
     gsOptionList optionList;
@@ -274,7 +274,7 @@ int main(int argc, char *argv[])
             else
                 bc.addCondition(*bit, condition_type::laplace, laplace);
         }
-        bc.setGeoMap(geom);
+        bc.setGeoMap(mp);
         gsInfo << "Boundary conditions:\n" << bc << "\n";
         //! [Boundary condition]
 
@@ -359,7 +359,7 @@ int main(int argc, char *argv[])
         if (smoothing == MethodFlags::DPATCH)
             mp.uniformRefine(1, discreteDegree-discreteRegularity);
     }
-    gsWriteParaview(geom, "geometry", 2000);
+    gsWriteParaview(mp, "geometry", 2000);
     gsInfo << "Patches: "<< mp.nPatches() <<", degree: "<< dbasis.minCwiseDegree() <<"\n";
 #ifdef _OPENMP
     gsInfo<< "Available threads: "<< omp_get_max_threads() <<"\n";
@@ -375,8 +375,7 @@ int main(int argc, char *argv[])
     gsExprEvaluator<real_t> ev(A);
 
     // Set the geometry map
-    geom = mp;
-    auto G = A.getMap(geom);
+    auto G = A.getMap(mp);
 
     // Set the source term
     auto ff = A.getCoeff(f, G); // Laplace example
@@ -424,16 +423,21 @@ int main(int argc, char *argv[])
             mp.uniformRefine(1,discreteDegree-discreteRegularity);
             dbasis.uniformRefine(1,discreteDegree-discreteRegularity);
 
-
             meshsize[r] = dbasis.basis(0).getMinCellLength();
+
+            gsWriteParaview(mp, "geometry"+std::to_string(r),2000, true);
 
             gsSparseMatrix<real_t> global2local;
             gsDPatch<2,real_t> dpatch(mp);
             dpatch.matrix_into(global2local);
             global2local = global2local.transpose();
-            geom = dpatch.exportToPatches();
+            mp = dpatch.exportToPatches();
             dbasis = dpatch.localBasis();
             bb2.init(dbasis,global2local);
+            
+            gsFileData<> fd;
+            fd << mp;
+            fd.save("geom");
         }
         gsInfo<< "." <<std::flush; // Approx C1 construction done
 
@@ -675,7 +679,7 @@ int main(int argc, char *argv[])
         //ev.writeParaview( grad(s), G, "solution_grad");
         //ev.writeParaview( grad(f), G, "solution_ex_grad");
         ev.writeParaview( (u_ex-u_sol), G, "error_pointwise");
-        gsWriteParaview( geom, "geom",100,true);
+        gsWriteParaview( mp, "geom",100,true);
     }
     else
         gsInfo << "Done. No output created, re-run with --plot to get a ParaView "
