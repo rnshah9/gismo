@@ -762,7 +762,7 @@ namespace gismo
                                 corners[j].getContainingSides(d,sides);
                                 colIdx = _indexFromVert(0,corners[j],sides[0],0,0); // 0,0
                                 colIdx = m_mapOriginal.index(colIdx,corners[j].patch);
-                                m_matrix(rowIndices(i+k*N,0),colIdx) = m_matrix(rowIndices(i+k*N,0),c11(i,0)); // by construction
+                                m_matrix(rowIndices(i+k*N,0),colIdx) = m_matrix(rowIndices(i+k*N,0),c11(i,0)); // by construction ----->>>>> memleak?!
 
                                 colIdx = _indexFromVert(1,corners[j],sides[0],0,0); // 1,0
                                 colIdx = m_mapOriginal.index(colIdx,corners[j].patch);
@@ -1738,7 +1738,7 @@ namespace gismo
         bool checkVerts = std::all_of(m_vertCheck.begin(), m_vertCheck.end(), [](bool m_vertCheck) { return m_vertCheck; });
         GISMO_ASSERT(checkVerts,"Not all vertices are checked");
         bool checkBasis = std::all_of(m_basisCheck.begin(), m_basisCheck.end(), [](bool m_basisCheck) { return m_basisCheck; });
-        GISMO_ASSERT(checkBasis,"Not all vertices are checked");
+        GISMO_ASSERT(checkBasis,"Not all basis functions are checked");
     }
 
     // THIS FUNCTION IS LEGACY!!

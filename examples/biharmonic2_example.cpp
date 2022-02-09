@@ -274,7 +274,7 @@ int main(int argc, char *argv[])
             else
                 bc.addCondition(*bit, condition_type::laplace, laplace);
         }
-        bc.setGeoMap(mp);
+        bc.setGeoMap(geom);
         gsInfo << "Boundary conditions:\n" << bc << "\n";
         //! [Boundary condition]
 
@@ -359,7 +359,7 @@ int main(int argc, char *argv[])
         if (smoothing == MethodFlags::DPATCH)
             mp.uniformRefine(1, discreteDegree-discreteRegularity);
     }
-    gsWriteParaview(mp, "geometry", 2000);
+    gsWriteParaview(geom, "geometry", 2000);
     gsInfo << "Patches: "<< mp.nPatches() <<", degree: "<< dbasis.minCwiseDegree() <<"\n";
 #ifdef _OPENMP
     gsInfo<< "Available threads: "<< omp_get_max_threads() <<"\n";
@@ -376,7 +376,7 @@ int main(int argc, char *argv[])
 
     // Set the geometry map
     geom = mp;
-    auto G = A.getMap(mp);
+    auto G = A.getMap(geom);
 
     // Set the source term
     auto ff = A.getCoeff(f, G); // Laplace example
@@ -427,28 +427,13 @@ int main(int argc, char *argv[])
 
             meshsize[r] = dbasis.basis(0).getMinCellLength();
 
-            std::vector<patchCorner> C0_corners;
-            patchCorner corner1(0,2);
-            patchCorner corner2(2,2);
-            patchCorner corner3(3,3);
-            patchCorner corner4(4,2);
-            patchCorner corner5(1,2);
-            patchCorner corner6(2,3);
-            C0_corners.push_back(corner1);
-            C0_corners.push_back(corner2);
-            C0_corners.push_back(corner3);
-            C0_corners.push_back(corner4);
-            C0_corners.push_back(corner5);
-            C0_corners.push_back(corner6);
-
             gsSparseMatrix<real_t> global2local;
             gsDPatch<2,real_t> dpatch(mp);
             dpatch.matrix_into(global2local);
             global2local = global2local.transpose();
-            mp = dpatch.exportToPatches();
+            geom = dpatch.exportToPatches();
             dbasis = dpatch.localBasis();
             bb2.init(dbasis,global2local);
-            mp.computeTopology();
         }
         gsInfo<< "." <<std::flush; // Approx C1 construction done
 
