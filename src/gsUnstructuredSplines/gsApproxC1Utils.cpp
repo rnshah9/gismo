@@ -18,13 +18,16 @@
 
 namespace gismo
 {
-    void createGluingDataSpace(const gsGeometry<real_t> & patch, const gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & result)
+    void createGluingDataSpace(const gsGeometry<real_t> & patch, const gsBasis<real_t> & basis, index_t dir,
+                               gsBSplineBasis<real_t> & result, index_t p_tilde, index_t r_tilde)
     {
         const gsBSplineBasis<real_t> basis_1 = dynamic_cast<const gsBSplineBasis<real_t> &>(basis.component(dir));
 
-        // Later: to choose variable: TODO
-        index_t p_tilde = basis_1.degree() - 1;
-        index_t r_tilde = p_tilde - 1;
+        if (p_tilde == -1)
+            p_tilde = basis_1.degree() - 1;
+        if (r_tilde == -1)
+            r_tilde = p_tilde - 1;
+
         gsKnotVector<real_t> kv_gluingData(basis_1.knots().unique(), p_tilde, r_tilde);
 
         // Geometry check
@@ -182,7 +185,8 @@ namespace gismo
     }
 
     // Corner Vertex
-    void createVertexSpace(const gsGeometry<real_t> & patch, gsBasis<real_t> & basis, bool isInterface_1, bool isInterface_2, gsTensorBSplineBasis<2, real_t> & result)
+    void createVertexSpace(const gsGeometry<real_t> & patch, gsBasis<real_t> & basis, bool isInterface_1,
+                           bool isInterface_2, gsTensorBSplineBasis<2, real_t> & result, index_t p_tilde, index_t r_tilde)
     {
         gsTensorBSplineBasis<2, real_t> basis_vertex = dynamic_cast<gsTensorBSplineBasis<2, real_t> &>(basis);
 
@@ -191,7 +195,7 @@ namespace gismo
             if (dir == 0 ? isInterface_1 : isInterface_2) // If edge is an interface
             {
                 gsBSplineBasis<real_t> basis_gluingData, basis_plus, basis_minus;
-                createGluingDataSpace(patch, basis, dir, basis_gluingData);
+                createGluingDataSpace(patch, basis, dir, basis_gluingData, p_tilde, r_tilde);
                 createPlusSpace(patch, basis, dir, basis_plus);
                 createMinusSpace(patch, basis, dir, basis_minus);
 

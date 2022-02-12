@@ -18,7 +18,8 @@
 namespace gismo
 {
 
-void createGluingDataSpace(const gsGeometry<real_t> & patch, const gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & result);
+void createGluingDataSpace(const gsGeometry<real_t> & patch, const gsBasis<real_t> & basis, index_t dir,
+                           gsBSplineBasis<real_t> & result, index_t p_tilde, index_t r_tilde);
 
 void createPlusSpace(const gsGeometry<real_t> & patch, gsBasis<real_t> & basis, index_t dir, gsBSplineBasis<real_t> & res_plus);
 
@@ -31,7 +32,7 @@ void createEdgeSpace(const gsGeometry<real_t> & patch, gsBasis<real_t> & basis, 
                      gsBSplineBasis<real_t> & basis_minus, gsTensorBSplineBasis<2, real_t> & result);
 
 void createVertexSpace(const gsGeometry<real_t> & patch, gsBasis<real_t> & basis, bool isInterface_1, bool isInterface_2,
-                       gsTensorBSplineBasis<2, real_t> & result);
+                       gsTensorBSplineBasis<2, real_t> & result, index_t p_tilde, index_t r_tilde);
 
 // Input is parametric coordinates of 1-D \a mp
 template <class T>

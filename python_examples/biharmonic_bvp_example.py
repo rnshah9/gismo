@@ -99,17 +99,17 @@ def create_biharmonic_bvp(path_geo, loop, deg, reg, path_bvp, method, penalty_in
 
 
 ''' ####### USER INPUT ####### '''
-geo_list = ["g1400", "g1100"]  # Without .xml extension
+geo_list = ["g1501"]  # Without .xml extension
 path_geo = "planar/geometries/"
 
 deg_list = [3, 4, 5]
 loop = 4
 
-method = Method.Nitsche
+method = Method.ApproxC1
 penalty_init = -1.0
 
 # Condition number
-cond = True
+cond = False
 
 xml_col = "XmlCollection_input"  # Without .xml extension
 path_xml = "results/XmlCollection/"

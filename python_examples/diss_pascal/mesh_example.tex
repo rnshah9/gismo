@@ -1,0 +1,77 @@
+\documentclass[a4paper,3p,sort&compress]{elsarticle}%
+\usepackage[T1]{fontenc}%
+\usepackage[utf8]{inputenc}%
+\usepackage{lmodern}%
+\usepackage{textcomp}%
+\usepackage{lastpage}%
+\usepackage{subcaption}%
+%
+\usepackage{tikz}%
+\usepackage{pgfplots}%
+\usepgfplotslibrary{external}%
+\tikzexternalize[prefix=tikz_figures/]%
+\newcommand{\inputtikz}[1]{\tikzsetnextfilename{#1}\input{tikz_files/#1.tikz}}%
+\pgfplotsset{every axis/.append style={label style={font=\tiny},tick label style={font=\tiny},axis lines*=left,axis line style={-},}}%
+\pgfplotsset{every add plot/.append style={line width=1pt,}}%
+\usepackage{xcolor}%
+\definecolor{blue}{HTML}{95DBE5}%
+\definecolor{red}{HTML}{078282}%
+\definecolor{green}{HTML}{339E66}%
+%
+\begin{document}%
+\normalsize%
+
+
+\begin{figure}[h!]%
+\centering%
+\begin{subfigure}[b]{0.25\textwidth}%
+\centering%
+\inputtikz{g1000_mesh}%
+\caption{Ex. I: geometry}%
+\end{subfigure}%
+\begin{subfigure}[b]{0.25\textwidth}%
+\centering%
+\inputtikz{g1100_mesh}%
+\caption{Ex. II: geometry}%
+\end{subfigure}%
+\begin{subfigure}[b]{0.25\textwidth}%
+\centering%
+\inputtikz{g1510_mesh}%
+\caption{Ex. III: geometry}%
+\end{subfigure}%
+\begin{subfigure}[b]{0.25\textwidth}%
+\centering%
+\inputtikz{g1400_mesh}%
+\caption{Ex. IV: geometry}%
+\end{subfigure}%
+\\%
+\begin{subfigure}[b]{0.25\textwidth}%
+\centering%
+\resizebox{\textwidth}{!}{\includegraphics[width=\textwidth]{tikz_figures/solution_g1000.pdf}%
+}%
+\caption{Ex. I: solution}%
+\end{subfigure}%
+\begin{subfigure}[b]{0.25\textwidth}%
+\centering%
+\resizebox{\textwidth}{!}{\includegraphics[width=\textwidth]{tikz_figures/solution_g1100.pdf}%
+}%
+\caption{Ex. II: solution}%
+\end{subfigure}%
+\begin{subfigure}[b]{0.25\textwidth}%
+\centering%
+\resizebox{\textwidth}{!}{\includegraphics[width=\textwidth]{tikz_figures/solution_g1510.pdf}%
+}%
+\caption{Ex. III: solution}%
+\end{subfigure}%
+\begin{subfigure}[b]{0.25\textwidth}%
+\centering%
+\resizebox{\textwidth}{!}{\includegraphics[width=\textwidth]{tikz_figures/solution_g1400.pdf}%
+}%
+\caption{Ex. IV: solution}%
+\end{subfigure}%
+\\%
+\caption{Two kittens}%
+\end{figure}
+
+%
+\end{document}

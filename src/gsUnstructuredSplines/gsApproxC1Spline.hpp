@@ -40,6 +40,9 @@ void gsApproxC1Spline<d,T>::defaultOptions()
 
     m_options.addSwitch("info","Print debug information",  false );
     m_options.addSwitch("plot","Print debug information",  false );
+
+    m_options.addInt("gluingDataDegree","Print debug information",  -1 );
+    m_options.addInt("gluingDataRegularity","Print debug information",  -1 );
 }
 
 template<short_t d,class T>
@@ -128,7 +131,8 @@ void gsApproxC1Spline<d,T>::init()
 
         // [!Gluing data space]
         gsBSplineBasis<T> basis_gluingData;
-        createGluingDataSpace(m_patches.patch(item.first().patch), basis_11, dir_1, basis_gluingData);
+        createGluingDataSpace(m_patches.patch(item.first().patch), basis_11, dir_1, basis_gluingData,
+                              m_options.getInt("gluingDataDegree"), m_options.getInt("gluingDataRegularity"));
         // [!Gluing data space]
 
         // [!Edge space]
@@ -189,7 +193,8 @@ void gsApproxC1Spline<d,T>::init()
 
             gsTensorBSplineBasis<d, T> basis_vertex_11;
             createVertexSpace(m_patches.patch(allcornerLists[j].patch), m_multiBasis.basis(allcornerLists[j].patch),
-                              isInterface_1, isInterface_2, basis_vertex_11);
+                              isInterface_1, isInterface_2, basis_vertex_11, m_options.getInt("gluingDataDegree"),
+                              m_options.getInt("gluingDataRegularity"));
 
             m_bases[allcornerLists[j].patch].setBasis(allcornerLists[j].m_index + 4, basis_vertex_11);
         }

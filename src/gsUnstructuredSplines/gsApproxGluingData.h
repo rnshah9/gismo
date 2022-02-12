@@ -96,7 +96,8 @@ void gsApproxGluingData<d, T>::setGlobalGluingData(index_t patchID, index_t dir)
 
     // ======== Space for gluing data : S^(p_tilde, r_tilde) _k ========
     gsBSplineBasis<T> bsp_gD;
-    createGluingDataSpace(m_auxPatches[patchID].getPatchRotated(), m_auxPatches[patchID].getBasisRotated().piece(0), dir, bsp_gD);
+    createGluingDataSpace(m_auxPatches[patchID].getPatchRotated(), m_auxPatches[patchID].getBasisRotated().piece(0),
+                          dir, bsp_gD, m_optionList.getInt("gluingDataDegree"), m_optionList.getInt("gluingDataRegularity"));
 
     //! [Problem setup]
     gsSparseSolver<real_t>::LU solver;

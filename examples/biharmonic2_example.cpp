@@ -193,6 +193,10 @@ int main(int argc, char *argv[])
     index_t numRefine  = 3;
     index_t discreteDegree = 3;
     index_t discreteRegularity = 2;
+
+    index_t gluingDataDegree = -1;
+    index_t gluingDataRegularity = -1;
+
     bool last = false;
     bool info = false;
     bool neumann = false;
@@ -211,6 +215,9 @@ int main(int argc, char *argv[])
     cmd.addInt( "p", "discreteDegree","Which discrete degree?", discreteDegree );
     cmd.addInt( "r", "discreteRegularity", "Number of discreteRegularity",  discreteRegularity );
     cmd.addInt( "l", "refinementLoop", "Number of refinementLoop",  numRefine );
+
+    cmd.addInt( "P", "gluingDataDegree","Which degree for gluing data?", gluingDataDegree );
+    cmd.addInt( "R", "gluingDataRegularity", "Which regularity for gluing data?",  gluingDataRegularity );
 
     cmd.addString( "f", "file", "Input geometry file", fn );
     cmd.addInt( "g", "geometry", "Which geometry",  geometry );
@@ -322,6 +329,9 @@ int main(int argc, char *argv[])
     discreteRegularity = optionList.getInt("discreteRegularity");
     numRefine = optionList.getInt("refinementLoop");
 
+    gluingDataDegree = optionList.getInt("gluingDataDegree");
+    gluingDataRegularity = optionList.getInt("gluingDataRegularity");
+
     smoothing = optionList.getInt("smoothing");
 
     penalty_init = optionList.getReal("penalty");
@@ -359,7 +369,7 @@ int main(int argc, char *argv[])
         if (smoothing == MethodFlags::DPATCH)
             mp.uniformRefine(1, discreteDegree-discreteRegularity);
     }
-    gsWriteParaview(mp, "geometry", 2000);
+
     gsInfo << "Patches: "<< mp.nPatches() <<", degree: "<< dbasis.minCwiseDegree() <<"\n";
 #ifdef _OPENMP
     gsInfo<< "Available threads: "<< omp_get_max_threads() <<"\n";
@@ -388,6 +398,8 @@ int main(int argc, char *argv[])
     gsApproxC1Spline<2,real_t> approxC1(mp,dbasis);
     approxC1.options().setSwitch("info",info);
     approxC1.options().setSwitch("plot",plot);
+    approxC1.options().setInt("gluingDataDegree",gluingDataDegree);
+    approxC1.options().setInt("gluingDataRegularity",gluingDataRegularity);
 
     // Solution vector and solution variable
     gsMatrix<real_t> solVector;
@@ -424,8 +436,6 @@ int main(int argc, char *argv[])
             dbasis.uniformRefine(1,discreteDegree-discreteRegularity);
 
             meshsize[r] = dbasis.basis(0).getMinCellLength();
-
-            gsWriteParaview(mp, "geometry"+std::to_string(r),2000, true);
 
             gsSparseMatrix<real_t> global2local;
             gsDPatch<2,real_t> dpatch(mp);
@@ -575,6 +585,8 @@ int main(int argc, char *argv[])
             gsConjugateGradient<> cg(A.matrix());
 
             cg.setCalcEigenvalues(true);
+            cg.setTolerance(1e-15);
+            cg.setMaxIterations(100000);
 
             gsMatrix<> rhs, result;
             rhs.setRandom( A.matrix().rows(), 1 );
@@ -582,13 +594,17 @@ int main(int argc, char *argv[])
 
             cg.solve(rhs,result);
 
+            gsInfo << "Tol: " << cg.error() << "\n";
+            gsInfo << "Max it: " << cg.iterations() << "\n";
+
             gsMatrix<real_t> eigenvalues;
             cg.getEigenvalues(eigenvalues);
 
-            gsInfo << eigenvalues.transpose() << "\n";
+            gsInfo << "Cond Number: " << eigenvalues.bottomRows(1)(0,0)/ eigenvalues(0,0) << "\n";
+            cond_num[r] = eigenvalues.bottomRows(1)(0,0)/ eigenvalues(0,0);
+            //cond_num[r] = cg.getConditionNumber();
 
-            cond_num[r] = cg.getConditionNumber();
-
+/*
             gsMatrix<> x, x2;
             x.setRandom( A.matrix().rows(), 1 );
 
@@ -617,7 +633,7 @@ int main(int argc, char *argv[])
             gsInfo << "min_ev: " << min_ev << "\n";
             gsInfo << "Cond: " << max_ev/min_ev << "\n";
             cond_num[r] = max_ev/min_ev;
-
+*/
         }
         err_time += timer.stop();
         gsInfo<< ". " <<std::flush; // Error computations done
@@ -672,7 +688,7 @@ int main(int argc, char *argv[])
     if (plot)
     {
         gsInfo<<"Plotting in Paraview...\n";
-        ev.options().setSwitch("plot.elements", false);
+        ev.options().setSwitch("plot.elements", true);
         ev.options().setInt   ("plot.npts"    , 1000);
         ev.writeParaview( u_sol   , G, "solution");
         //ev.writeParaview( u_ex    , G, "solution_ex");
