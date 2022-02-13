@@ -1,0 +1,18 @@
+\begin{tikzpicture}%
+\begin{axis}[xmode=log,ymode=log,height=6cm,mark options={solid},xlabel={Stability parameter $\eta$},ylabel={Error},width=1\textwidth]%
+\addplot[color=green,line width=1pt,solid] coordinates {%
+(0.128,2.068150489558865e-05)%
+(1.28,2.068211263357334e-05)%
+(12.672,2.068881870584075e-05)%
+(128.0,2.351909224714954e-05)%
+(1290.112,3.040736838857785e-05)%
+(13004.032,2.057908126032652e-05)%
+(131072.0,2.056560914181674e-05)%
+(1321126.4,2.05474754270496e-05)%
+(13316096.0,2.050431548245454e-05)%
+(134218240.0,2.039046355374425e-05)%
+};%
+%
+%
+\end{axis}%
+\end{tikzpicture}%

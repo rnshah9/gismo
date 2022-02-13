@@ -119,7 +119,7 @@ class MyTikz(Document):
             else:
                 for col in range(res.shape[1]):
                     points_temp = []  # Number of cols
-                    for i, j in zip(x[idx], res[:, col]):
+                    for i, j in zip(x[idx][0], res[:, col]):
                         points_temp.append([i, j])
                     points.append(points_temp)
                 points_list.append(points)

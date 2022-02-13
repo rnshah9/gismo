@@ -182,6 +182,88 @@ void gsDirichletNeumannValuesL2Projection(gsMultiPatch<> & mp, gsMultiBasis<> & 
     }
 }
 
+void computeStabilityParameter(gsMultiPatch<> mp, gsMultiBasis<> dbasis, gsMatrix<real_t> & mu_interfaces)
+{
+    mu_interfaces.setZero();
+
+    index_t i = 0;
+    for ( typename gsMultiPatch<real_t>::const_iiterator it = mp.iBegin(); it != mp.iEnd(); ++it, ++i)
+    {
+        gsMultiPatch<> mp_temp;
+        mp_temp.addPatch(mp.patch(it->first().patch));
+        mp_temp.addPatch(mp.patch(it->second().patch));
+        mp_temp.computeTopology();
+
+        gsMultiBasis<> dbasis_temp;
+        dbasis_temp.addBasis(dbasis.basis(it->first().patch).clone().release());
+        dbasis_temp.addBasis(dbasis.basis(it->second().patch).clone().release());
+
+        gsExprAssembler<real_t> A2(1, 1), B2(1, 1);
+
+        // Elements used for numerical integration
+        A2.setIntegrationElements(dbasis_temp);
+        B2.setIntegrationElements(dbasis_temp);
+
+        // Set the geometry map
+        auto GA = A2.getMap(mp_temp);
+        auto GB = B2.getMap(mp_temp);
+
+        // Set the discretization space
+        auto uA = A2.getSpace(dbasis_temp);
+        auto uB = B2.getSpace(dbasis_temp);
+
+        uA.setup(0);
+        uB.setup(0);
+
+        A2.initSystem();
+        B2.initSystem();
+
+        real_t c = 0.25;
+        A2.assembleIfc(mp_temp.interfaces(),
+                       c * ilapl(uA.left(), GA.left()) * ilapl(uA.left(), GA.left()).tr() * nv(GA.left()).norm(),
+                       c * ilapl(uA.left(), GA.left()) * ilapl(uA.right(), GA.right()).tr() * nv(GA.left()).norm(),
+                       c * ilapl(uA.right(), GA.right()) * ilapl(uA.left(), GA.left()).tr() * nv(GA.left()).norm(),
+                       c * ilapl(uA.right(), GA.right()) * ilapl(uA.right(), GA.right()).tr() * nv(GA.left()).norm());
+
+        B2.assemble(ilapl(uB, GB) * ilapl(uB, GB).tr() * meas(GB));
+
+        Eigen::MatrixXd AA = A2.matrix().toDense().cast<double>();
+        Eigen::MatrixXd BB = B2.matrix().toDense().cast<double>();
+        Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges(AA, BB);
+
+        real_t m_h      = dbasis_temp.basis(0).getMinCellLength(); //*dbasis.basis(0).getMinCellLength();
+        mu_interfaces(i,0) = 4.0 * m_h * ges.eigenvalues().array().maxCoeff();
+/*
+        gsSparseSolver<>::SimplicialLDLT sol;
+        sol.compute(B2.matrix());
+        gsSparseMatrix<> R = sol.matrixU();
+        gsSparseMatrix<> RT = sol.matrixL();
+        gsMatrix<> AAA = RT.toDense().inverse() * AA * R.toDense().inverse();
+
+
+        gsConjugateGradient<> cg(AAA);
+
+        cg.setCalcEigenvalues(true);
+        cg.setTolerance(1e-15);
+        cg.setMaxIterations(100000);
+
+        gsMatrix<> rhs, result;
+        rhs.setRandom( AAA.rows(), 1 );
+        result.setRandom( AAA.rows(), 1 );
+
+        cg.solve(rhs,result);
+
+        gsInfo << "Tol: " << cg.error() << "\n";
+        gsInfo << "Max it: " << cg.iterations() << "\n";
+
+        gsMatrix<real_t> eigenvalues;
+        cg.getEigenvalues(eigenvalues);
+
+        gsInfo << "Cond Number: " << eigenvalues.bottomRows(1)(0,0) << "\n";
+*/
+    }
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -409,10 +491,14 @@ int main(int argc, char *argv[])
     auto u_ex = ev.getVariable(ms, G);
     //! [Problem setup]
 
+    // For Nitsche
+    gsMatrix<real_t> mu_interfaces(mp.nInterfaces(),1);
+
     //! [Solver loop]
     gsVector<real_t> l2err(numRefine+1), h1err(numRefine+1), h2err(numRefine+1),
             IFaceErr(numRefine+1), meshsize(numRefine+1), dofs(numRefine+1),
-            cond_num(numRefine+1), penalty(numRefine+1);
+            cond_num(numRefine+1);
+    gsMatrix<real_t> penalty(numRefine+1, mp.nInterfaces());
     gsInfo<< "(dot1=approxC1construction, dot2=assembled, dot3=solved, dot4=got_error)\n"
         "\nDoFs: ";
     double setup_time(0), ma_time(0), slv_time(0), err_time(0);
@@ -487,38 +573,97 @@ int main(int argc, char *argv[])
         //auto g_L = A.getCoeff(laplace, G);
         A.assembleBdr(bc.get("Laplace"), (igrad(u, G) * nv(G)) * g_L.tr() );
 
-        real_t stab     = 4 * ( dbasis.maxCwiseDegree() + dbasis.dim() ) * ( dbasis.maxCwiseDegree() + 1 );
-        real_t m_h      = dbasis.basis(0).getMinCellLength(); //*dbasis.basis(0).getMinCellLength();
-        real_t mu       = 2 * stab / m_h;
         if (smoothing == MethodFlags::NITSCHE)
         {
-            mu = penalty_init == -1.0 ? mu : penalty_init / m_h;
-            penalty[r] = mu;
 
-            real_t alpha = 1;
-            A.assembleIfc(mp.interfaces(),
-                //B11
-                -alpha*0.5*igrad( u.left() , G) * nv(G.left()).normalized() * (ilapl(u.left(), G)).tr() * nv(G.left()).norm(),
-                -alpha*0.5*(igrad( u.left() , G) * nv(G.left()).normalized() * (ilapl(u.left(), G)).tr()).tr() * nv(G.left()).norm(),
-                //B12
-                -alpha*0.5*igrad( u.left()  , G.left()) * nv(G.left()).normalized() * (ilapl(u.right(), G.right())).tr() * nv(G.left()).norm(),
-                -alpha*0.5*(igrad( u.left()  , G.left()) * nv(G.left()).normalized() * (ilapl(u.right(), G.right())).tr()).tr() * nv(G.left()).norm(),
-                //B21
-                alpha*0.5*igrad( u.right(), G.right()) * nv(G.left()).normalized() * (ilapl(u.left(), G.left())).tr() * nv(G.left()).norm(),
-                alpha*0.5*(igrad( u.right(), G.right()) * nv(G.left()).normalized() * (ilapl(u.left(), G.left())).tr()).tr() * nv(G.left()).norm(),
-                //B22
-                alpha*0.5*igrad( u.right() , G.right()) * nv(G.left()).normalized() * (ilapl(u.right(), G.right())).tr() * nv(G.left()).norm(),
-                alpha*0.5*(igrad( u.right() , G.right()) * nv(G.left()).normalized() * (ilapl(u.right(), G.right())).tr()).tr() * nv(G.left()).norm(),
+//            gsExprAssembler<real_t> A2(1,1), B2(1,1);
+//
+//            // Elements used for numerical integration
+//            A2.setIntegrationElements(dbasis);
+//            B2.setIntegrationElements(dbasis);
+//
+//            // Set the geometry map
+//            auto GA = A2.getMap(mp);
+//            auto GB = B2.getMap(mp);
+//
+//            // Set the discretization space
+//            auto uA = A2.getSpace(dbasis);
+//            auto uB = B2.getSpace(dbasis);
+//
+//            uA.setup(0);
+//            uB.setup(0);
+//
+//            A2.initSystem();
+//            B2.initSystem();
+//
+//            real_t c = 0.25;
+//            A2.assembleIfc(mp.interfaces(), c * ilapl(uA.left(), GA.left())* ilapl(uA.left(), GA.left()).tr() * nv(GA.left()).norm(),
+//                                            c * ilapl(uA.left(), GA.left())* ilapl(uA.right(), GA.right()).tr() * nv(GA.left()).norm(),
+//                                            c * ilapl(uA.right(), GA.right())* ilapl(uA.left(), GA.left()).tr() * nv(GA.left()).norm(),
+//                                            c * ilapl(uA.right(), GA.right())* ilapl(uA.right(), GA.right()).tr() * nv(GA.left()).norm());
+//            B2.assemble(ilapl(uB, GB) * ilapl(uB, GB).tr() * meas(GB));
+//
+//            Eigen::MatrixXd AA = A2.matrix().toDense().cast<double>();
+//            Eigen::MatrixXd BB = B2.matrix().toDense().cast<double>();
+//            Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges(AA, BB);
+//            gsInfo << ges.m_maxIterations << "\n";
+//            gsInfo << "Eigenvalue " << ges.eigenvalues().array().maxCoeff();
+//            gsInfo << "Eigenvalue " << 4.0/(m_h) * ges.eigenvalues().array().maxCoeff();
 
-                // E11
-                mu * igrad(u.left(), G.left()) * nv(G.left()).normalized() * (igrad(u.left(), G.left()) * nv(G.left()).normalized()).tr() * nv(G.left()).norm(),
-                //-E12
-                -mu * (igrad(u.left(), G.left()) * nv(G.left()).normalized()) * (igrad(u.right(), G.right()) * nv(G.left()).normalized()).tr() * nv(G.left()).norm(),
-                //-E21
-                -mu * (igrad(u.right(), G.right()) * nv(G.left()).normalized()) * (igrad(u.left(), G.left()) * nv(G.left()).normalized()).tr() * nv(G.left()).norm(),
-                // E22
-                mu * igrad(u.right(), G.right()) * nv(G.left()).normalized() * (igrad(u.right(), G.right()) * nv(G.left()).normalized()).tr() * nv(G.left()).norm()
-            );
+            //if (r < 3) // From level 3 and more, the previous EW is used and devided by ḿesh-size (save computation time)
+            //    computeStabilityParameter(mp, dbasis, mu_interfaces);
+
+            index_t i = 0;
+            for ( typename gsMultiPatch<real_t>::const_iiterator it = mp.iBegin(); it != mp.iEnd(); ++it, ++i)
+            {
+                real_t stab     = 4 * ( dbasis.maxCwiseDegree() + dbasis.dim() ) * ( dbasis.maxCwiseDegree() + 1 );
+                real_t m_h      = dbasis.basis(0).getMinCellLength(); //*dbasis.basis(0).getMinCellLength();
+                real_t mu       = 2 * stab / m_h;
+                real_t alpha = 1;
+
+                mu = penalty_init == -1.0 ? mu : penalty_init / m_h;
+                //mu = mu_interfaces(i,0) / m_h;
+                penalty(r,i) = mu;
+
+                std::vector<boundaryInterface> iFace;
+                iFace.push_back(*it);
+                A.assembleIfc(iFace,
+                        //B11
+                              -alpha * 0.5 * igrad(u.left(), G) * nv(G.left()).normalized() *
+                              (ilapl(u.left(), G)).tr() * nv(G.left()).norm(),
+                              -alpha * 0.5 *
+                              (igrad(u.left(), G) * nv(G.left()).normalized() * (ilapl(u.left(), G)).tr()).tr() *
+                              nv(G.left()).norm(),
+                        //B12
+                              -alpha * 0.5 * igrad(u.left(), G.left()) * nv(G.left()).normalized() *
+                              (ilapl(u.right(), G.right())).tr() * nv(G.left()).norm(),
+                              -alpha * 0.5 * (igrad(u.left(), G.left()) * nv(G.left()).normalized() *
+                                              (ilapl(u.right(), G.right())).tr()).tr() * nv(G.left()).norm(),
+                        //B21
+                              alpha * 0.5 * igrad(u.right(), G.right()) * nv(G.left()).normalized() *
+                              (ilapl(u.left(), G.left())).tr() * nv(G.left()).norm(),
+                              alpha * 0.5 * (igrad(u.right(), G.right()) * nv(G.left()).normalized() *
+                                             (ilapl(u.left(), G.left())).tr()).tr() * nv(G.left()).norm(),
+                        //B22
+                              alpha * 0.5 * igrad(u.right(), G.right()) * nv(G.left()).normalized() *
+                              (ilapl(u.right(), G.right())).tr() * nv(G.left()).norm(),
+                              alpha * 0.5 * (igrad(u.right(), G.right()) * nv(G.left()).normalized() *
+                                             (ilapl(u.right(), G.right())).tr()).tr() * nv(G.left()).norm(),
+
+                        // E11
+                              mu * igrad(u.left(), G.left()) * nv(G.left()).normalized() *
+                              (igrad(u.left(), G.left()) * nv(G.left()).normalized()).tr() * nv(G.left()).norm(),
+                        //-E12
+                              -mu * (igrad(u.left(), G.left()) * nv(G.left()).normalized()) *
+                              (igrad(u.right(), G.right()) * nv(G.left()).normalized()).tr() * nv(G.left()).norm(),
+                        //-E21
+                              -mu * (igrad(u.right(), G.right()) * nv(G.left()).normalized()) *
+                              (igrad(u.left(), G.left()) * nv(G.left()).normalized()).tr() * nv(G.left()).norm(),
+                        // E22
+                              mu * igrad(u.right(), G.right()) * nv(G.left()).normalized() *
+                              (igrad(u.right(), G.right()) * nv(G.left()).normalized()).tr() * nv(G.left()).norm()
+                );
+            }
         }
 
         ma_time += timer.stop();
@@ -706,7 +851,7 @@ int main(int argc, char *argv[])
     //! [Export data to xml]
     if (!output.empty())
     {
-        index_t cols = smoothing == MethodFlags::NITSCHE ? 8 : 7;
+        index_t cols = smoothing == MethodFlags::NITSCHE ? 7+penalty.cols() : 7;
         gsMatrix<real_t> error_collection(l2err.rows(), cols);
         error_collection.col(0) = meshsize;
         error_collection.col(1) = dofs;
@@ -716,10 +861,11 @@ int main(int argc, char *argv[])
         error_collection.col(5) = IFaceErr;
         error_collection.col(6) = cond_num;
         if (smoothing == MethodFlags::NITSCHE)
-            error_collection.col(7) = penalty;
+            error_collection.block(0,7,penalty.rows(),penalty.cols()) = penalty;
 
         gsFileData<real_t> xml_out;
         xml_out << error_collection;
+        xml_out.addString("Meshsize, dofs, l2err, h1err, h2err, iFaceErr, cond_num, (penalty)","Label");
         xml_out.addString(std::to_string(discreteDegree),"Degree");
         xml_out.addString(std::to_string(discreteRegularity),"Regularity");
         xml_out.addString(std::to_string(numRefine),"NumRefine");
