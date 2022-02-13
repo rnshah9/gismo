@@ -68,6 +68,11 @@ xml_col = "Xml_jump_results.xml"
 
 ''' ##### USER INPUT END ##### '''
 
+path_dir = "jump/"
+path_tikz = "tikz_files/" + path_dir
+path_fig = "tikz_figures/" + path_dir
+
+
 max_id = 0
 file_col = gs.io.gsXmlCollection(xml_col)
 for idx, compute in enumerate(compute_list):
@@ -116,9 +121,6 @@ for idx, compute in enumerate(compute_list):
                 max_id = max_id + 1
 
 file_col.save()
-
-path_tikz = "tikz_files/"
-path_fig = "tikz_figures/"
 
 file1 = gs.io.gsXmlCollection("")
 file1.load(xml_col)
@@ -206,7 +208,9 @@ def create_tikz_figures(geo_mat_list, name_mat_list, deg_list, opt_plot, shift=0
         # print(np.around(rate_h2,2))
 
         fig = MyTikz()
-        opt_axis = {'xmode': 'log', 'ymode': 'log', 'height': '6cm', 'mark options': '{solid}'}
+        opt_axis = {'xmode': 'log', 'ymode': 'log', 'height': '6cm', 'mark options': '{solid}',
+                    'xlabel': '{Mesh size $h$}', 'ylabel' : '{Error}',
+                    'ylabel style' : '{yshift=-0.4cm}', 'xlabel style':'{yshift=0.2cm}'}
         fig.setOptions(opt_axis)
         color_list = ["red", "green", "blue", "yellow"]
         fig.setColor(color_list)
@@ -216,7 +220,7 @@ def create_tikz_figures(geo_mat_list, name_mat_list, deg_list, opt_plot, shift=0
         fig.create_error_plot(x, M, True, True)  # True since M is an array
         fig.generate_tikz(path_tikz + name_mat_list[idx])
 
-        list_tikz.append(name_mat_list[idx])
+        list_tikz.append(path_dir + name_mat_list[idx])
         if idx == 0:
             legend_list = fig.getLegendList()
     return list_tikz, legend_list
@@ -252,7 +256,7 @@ for idx, method in enumerate(method_list):
         fig = MyTikz()
         fig.create_legend(legend_image, legend_entry)
         fig.generate_tikz(path_tikz + "legend_jump_approxC1")
-        legend_list.append(["legend_jump_approxC1"])
+        legend_list.append([path_dir + "legend_jump_approxC1"])
 
     if method == Method.Nitsche:
         legend_image2 = []
@@ -270,7 +274,7 @@ for idx, method in enumerate(method_list):
         fig = MyTikz()
         fig.create_legend(legend_image2, legend_entry2)
         fig.generate_tikz(path_tikz + "legend_jump_nitsche")
-        legend_list.append(["legend_jump_nitsche"])
+        legend_list.append([path_dir + "legend_jump_nitsche"])
 
 caption_coll = []
 for method in method_list:
@@ -293,6 +297,6 @@ for idx in range(len(method_list)):
     doc.addTikzFigure(tikz_coll[idx], caption_coll[idx], row=4, legend=legend_list[idx])
 doc.generate_pdf("jump_example", compiler="pdflatex", compiler_args=["-shell-escape"], clean_tex=False)
 for idx in range(len(method_list)):
-    doc.clean_extensions(legend=legend_list[idx])
+    doc.clean_extensions(crop=legend_list[idx])
 doc.generate_pdf("jump_example", compiler="pdflatex", clean_tex=False)
 doc.clean_extensions()
