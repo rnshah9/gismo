@@ -33,7 +33,7 @@ from python2latex.python2latex import MyDocument
 geo_list = ["g1000", "g1100", "g1510", "g1400"]  # Without .xml extension
 path_geo = "planar/geometries/"
 
-numData = 10
+numData = 50
 
 filename = "test_mesh"
 
@@ -42,12 +42,13 @@ caption_list = ["Ex. I: geometry", "Ex. II: geometry", "Ex. III: geometry", "Ex.
 
 ms = gs.core.gsFunctionExpr("(cos(4*pi*x) - 1) * (cos(4*pi*y) - 1)",2)
 
-compute_mesh = False
+compute_mesh = True
 compute_solution = False
 ''' ##### USER INPUT END ##### '''
 
-path_tikz = "tikz_files/"
-path_fig = "tikz_figures/"
+path_dir = "geo/"
+path_tikz = "tikz_files/" + path_dir
+path_fig = "tikz_figures/" + path_dir
 
 tikz_list = []
 if compute_mesh:
@@ -103,7 +104,7 @@ if compute_mesh:
                     curve = Plot(options=opt_patch[idx], coordinates=points_patchwise[idx])
                     axis.append(curve)
 
-        tikz_list.append(geo + "_mesh")
+        tikz_list.append(path_dir + geo + "_mesh")
         tex = doc.dumps()  # The document as string in LaTeX syntax
         with open(path_tikz + geo + "_mesh.tikz", 'w') as f:
             begin = False
@@ -115,7 +116,7 @@ if compute_mesh:
                     f.write("\n")
 else:
     for geo in geo_list:
-        tikz_list.append(geo + "_mesh")
+        tikz_list.append(path_dir + geo + "_mesh")
 
 
 if compute_solution:
@@ -153,16 +154,16 @@ if compute_solution:
             surf._facecolors2d = surf._facecolor3d
             surf._edgecolors2d = surf._edgecolor3d
 
-        tikz_list.append('solution_' + geo + '.pdf')
+        tikz_list.append(path_dir+'solution_' + geo + '.pdf')
         plt.savefig(path_fig + 'solution_' + geo + '.pdf')
         #plt.show()
 else:
     for geo in geo_list:
-        tikz_list.append('solution_' + geo + '.pdf')
+        tikz_list.append(path_dir+'solution_' + geo + '.pdf')
 
 crop_list = []
 for geo in geo_list:
-    crop_list.append('solution_' + geo)
+    crop_list.append(path_dir+'solution_' + geo)
 doc = MyDocument()
 doc.addTikzFigure(tikz_list, caption_list, row=4)
 doc.generate_pdf("mesh_example", compiler="pdflatex", compiler_args=["-shell-escape"], clean_tex=False)

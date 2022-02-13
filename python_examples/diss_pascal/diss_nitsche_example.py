@@ -51,17 +51,16 @@ loop = 4
 deg = 3
 method = Method.Nitsche
 
-compute = True
-delete_files = True
-
-h = -1
+compute = False
+delete_files = False
 
 xml_col = "Xml_nitsche_results.xml"
 
-N = 1000
+h = -2
+N = 500
 
 penalty = np.linspace(-10, 20, num=N)
-penalty = np.around(np.power(2, penalty), decimals=3)
+penalty = np.around(np.power(2, penalty), decimals=5)
 ''' ##### USER INPUT END ##### '''
 
 max_id = 0
@@ -106,6 +105,22 @@ if compute:
         lib.biharmonic_example(path_bvp + ".xml", path_output)
         file_col.addFile(path_output)
         max_id = max_id + 1
+
+        # Nitsche with EW
+        pen = -1
+        reg = deg - 1
+        path_bvp = "results/" + geo + "/bvp/nitsche/" + "nitsche" + "-bvp1-p" + str(deg) + "-r" + str(reg) + \
+                   "-l" + str(loop) + "-y" + str(pen)
+        ptilde = -1
+        rtilde = -1
+
+        lib.create_biharmonic_bvp(path_geo=path_geo + geo, loop=loop, deg=deg, reg=reg, path_bvp=path_bvp,
+                                  method=method, ptilde=ptilde, rtilde=rtilde, penalty_init=pen)
+        path_output = path_bvp.replace("bvp/", "results/")
+        path_output = path_output + "-result.xml"
+        lib.biharmonic_example(path_bvp + ".xml", path_output)
+        file_col.addFile(path_output)
+        max_id = max_id + 1
     print("Finished!")
 else:
     for geo in geo_list:
@@ -124,6 +139,17 @@ else:
         reg = deg - 1
         path_bvp = "results/" + geo + "/bvp/nitsche/" + "approxC1" + "-bvp1-p" + str(deg) + "-r" + str(reg) + \
                    "-P" + str(ptilde) + "-R" + str(rtilde) + "-l" + str(loop)
+        path_output = path_bvp.replace("bvp/", "results/")
+        path_output = path_output + "-result.xml"
+        file_col.addFile(path_output)
+        max_id = max_id + 1
+
+        # Nitsche with EW
+        pen = -1
+        reg = deg - 1
+        path_bvp = "results/" + geo + "/bvp/nitsche/" + "nitsche" + "-bvp1-p" + str(deg) + "-r" + str(reg) + \
+                   "-l" + str(loop) + "-y" + str(pen)
+
         path_output = path_bvp.replace("bvp/", "results/")
         path_output = path_output + "-result.xml"
         file_col.addFile(path_output)
@@ -152,6 +178,7 @@ for id in range(max_id):
 
 m_str = ""
 geo_mat_list = []
+geo_mat_list2 = []
 name_mat_list = []
 name_mat_list2 = []
 m_str = "nitsche"
@@ -162,11 +189,13 @@ for geo in geo_list:
     mat_list = []
     for dict in list_dict:
         if m_str in dict["Name"]:
-            if dict["Geo"] == geo and int(dict["Deg"]) == deg:
+            if dict["Geo"] == geo and int(dict["Deg"]) == deg and "y-1" not in dict["Name"]:
                 mat_list.append(dict["Matrix"])
+            if dict["Geo"] == geo and int(dict["Deg"]) == deg and "y-1" in dict["Name"]:
+                geo_mat_list2.append([dict["Matrix"]])
     geo_mat_list.append(mat_list)
-    name_mat_list.append(geo + "-nitsche-penalty-p" + str(deg) + "-r2-l" + str(loop))
-    name_mat_list2.append(geo + "-nitsche-penalty-jump-p" + str(deg) + "-r2-l" + str(loop))
+    name_mat_list.append(geo + "-nitsche-penalty-p" + str(deg) + "-r" + str(deg-1) + "-l" + str(loop) + "-h" + str(h))
+    name_mat_list2.append(geo + "-nitsche-penalty-jump-p" + str(deg) + "-r" + str(deg-1) + "-l" + str(loop) + "-h" + str(h))
 
     mat_list = []
     for dict in list_dict:
@@ -175,8 +204,9 @@ for geo in geo_list:
                 mat_list.append(dict["Matrix"])
     geo_mat_list_approxC1.append(mat_list)
 
+
 list_tikz = []
-for idx, mat_list in enumerate(geo_mat_list):
+for idx, mat_list in enumerate(geo_mat_list):  # idx = geo
 
     x_col = 7  # Maybe change if more then one interface
 
@@ -193,7 +223,18 @@ for idx, mat_list in enumerate(geo_mat_list):
     M = np.zeros((len(mat_list), 3))
     for i, mat in enumerate(mat_list):
         M[i, :] = geo_mat_list_approxC1[idx][0][h,2:5]
+    M_list.append(M)
+    x_list.append(x)
 
+    a = geo_mat_list2[idx][0][h,4] * 5
+    b = geo_mat_list2[idx][0][h,2] * 0.2
+    yy = np.linspace(a, b, num=len(mat_list))
+
+    M = np.zeros((len(mat_list), 1))
+    x = np.zeros((1, len(mat_list)))
+    for i, mat in enumerate(mat_list):
+        M[i, :] = yy[i]
+        x[0,i] = geo_mat_list2[idx][0][h, x_col]
     M_list.append(M)
     x_list.append(x)
 
@@ -202,7 +243,7 @@ for idx, mat_list in enumerate(geo_mat_list):
                 {'color': 'red', 'line width': '1pt'}]
 
     fig = MyTikz()
-    opt_axis = {'xmode': 'log', 'ymode': 'log', 'height': '6cm', 'mark options': '{solid}',
+    opt_axis = {'xmode': 'log', 'ymode': 'log', 'height': '4.5cm', 'mark options': '{solid}',
                 'xlabel': '{Stability parameter $\eta$}', 'ylabel': '{Error}',
                 'ylabel style': '{yshift=-0.4cm}', 'xlabel style': '{yshift=0.2cm}'}
     fig.setOptions(opt_axis)
@@ -232,15 +273,28 @@ for idx, mat_list in enumerate(geo_mat_list):
     for i, mat in enumerate(mat_list):
         M[i, :] = geo_mat_list_approxC1[0][0][h,5]
 
+    # For Approx C1 Jump
     #M_list.append(M)
     #x_list.append(x)
+
+    a = geo_mat_list2[idx][0][h,5] * 5
+    b = geo_mat_list2[idx][0][h,5] * 0.2
+    yy = np.linspace(a, b, num=len(mat_list))
+
+    M = np.zeros((len(mat_list), 1))
+    x = np.zeros((1, len(mat_list)))
+    for i, mat in enumerate(mat_list):
+        M[i, :] = yy[i]
+        x[0,i] = geo_mat_list2[idx][0][h, x_col]
+    M_list.append(M)
+    x_list.append(x)
 
     opt_plot = [{'color': 'green', 'line width': '1pt'},
                 {'color': 'blue', 'line width': '1pt'},
                 {'color': 'red', 'line width': '1pt'}]
 
     fig = MyTikz()
-    opt_axis = {'xmode': 'log', 'ymode': 'log', 'height': '6cm', 'mark options': '{solid}',
+    opt_axis = {'xmode': 'log', 'ymode': 'log', 'height': '4.5cm', 'mark options': '{solid}',
                 'xlabel': '{Stability parameter $\eta$}', 'ylabel': '{Error}'}
     fig.setOptions(opt_axis)
     color_list = ["red", "green", "blue", "yellow"]
