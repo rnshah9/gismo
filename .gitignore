@@ -30,3 +30,12 @@ CMakeFiles/
 # Pascal
 python_examples/tikz_figures/*
 python_examples/tikz_results/*
+python_examples/results/*
+python_examples/python2latex/__pycache__/*
+python_examples/diss_pascal/tikz_figures/*
+python_examples/diss_pascal/tikz_files/*
+python_examples/diss_pascal/results/*/bvp/*
+python_examples/diss_pascal/*.pdf
+python_examples/diss_pascal/*.tex
+python_examples/diss_pascal/*.xml
+

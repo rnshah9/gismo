@@ -48,11 +48,10 @@ path_geo = "planar/geometries/"
 
 loop = 4
 
-deg = 3
+deg = 4
 method = Method.Nitsche
 
-compute = False
-delete_files = False
+compute = True
 
 xml_col = "Xml_nitsche_results.xml"
 
@@ -66,17 +65,6 @@ penalty = np.around(np.power(2, penalty), decimals=5)
 max_id = 0
 file_col = gs.io.gsXmlCollection(xml_col)
 if compute:
-    if delete_files:
-        locations = ['/bvp/nitsche/', '/results/nitsche/']
-        for loc in locations:
-            for geo in geo_list:
-                for f in glob.glob("results/" + geo + loc + "*" + '.xml'):
-                    try:
-                        os.remove(f)
-                    except (OSError, IOError) as e:
-                        # Use FileNotFoundError when python 2 is dropped
-                        if e.errno != errno.ENOENT:
-                            raise
     for geo in geo_list:
         for pen in penalty:
             reg = deg - 1
