@@ -23,6 +23,39 @@ import pygismo as gs
 import numpy as np
 import scipy.sparse as sparse
 
+row = np.array([0,   1,   4,   5,   8,   9,   12,  13,  2,   3,   16,  3,   16,  17,  6,   7,   20,  7,   20,  21,  10,  11,  24,  11,  24,  25,  14,  15,  28,  15,  28,  29,  18,  19,  22,  23,  26,  27,  30,  31])
+col = np.array([0,   1,   2,   3,   4,   5,   6,   7,   8,   8,   8,   9,   9,   9,   10,  10,  10,  11,  11,  11,  12,  12,  12,  13,  13,  13,  14,  14,  14,  15,  15,  15,  16,  17,  18,  19,  20,  21,  22,  23])
+data= np.array([1,   1,   1,   1,   1,   1,   1,   1,   1,   0.5, 0.5, 0.5, 0.5, 1,   1,   0.5, 0.5, 0.5, 0.5, 1,   1,   0.5, 0.5, 0.5, 0.5, 1,   1,   0.5, 0.5, 0.5, 0.5, 1,   1,   1,   1,   1,   1,   1,   1,   1])
+
+mat = sparse.csr_matrix((data, (row, col)), shape=(32, 24))
+
+"""" Save Matrix to XML file """
+mat = np.random.rand(3,2)
+fd = gs.io.gsFileData()
+fd.add(mat)  # I fixed it...sorry :D
+fd.save("matrix_saved.xml", False)
+
+"""" Read Matrix from XML file """
+file_path = "matrix_file.xml"
+matrix = gs.io.gsFileData.getMatrix(file_path)  # This works
+print(matrix)
+
+# Not possible:
+fd3 = gs.io.gsFileData(file_path)
+matrix2 = np.empty((5,7))
+fd3.getAnyFirst(matrix2)  # Is not working
+print(matrix2)
+
+
+mp = gs.core.gsMultiPatch()
+fd3.getAnyFirst(mp)  # With gsMultiPathc is working
+print(mp)
+
+exit()
+
+
+
+
 
 """" First example: save data for bvp """
 
@@ -146,6 +179,6 @@ print("Filedata saved: test_mspline.xml")
 # [!Save the data to the XML-file]
 
 
-"""" Third example: save xml collection """
 
-# Coming soon
+
+

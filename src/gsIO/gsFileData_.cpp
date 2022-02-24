@@ -70,12 +70,11 @@ namespace py = pybind11;
       .def("add", static_cast<void (Class::*)(const gsBoundaryConditions<real_t> &) > (&Class::add<gsBoundaryConditions<real_t>>), "Add gsBoundaryConditions to the filedata.")
       .def("add", static_cast<void (Class::*)(const gsFunctionExpr<real_t> &) > (&Class::add<gsFunctionExpr<real_t>>), "Add gsFunctionExpr to the filedata.")
       .def("add", static_cast<void (Class::*)(const gsOptionList &) > (&Class::add<gsOptionList>), "Add gsOptionList to the filedata.")
+      .def("add", static_cast<void (Class::*)(const gsMatrix<real_t> &) > (&Class::add<gsMatrix<real_t>>), "Add gsMatrix to the filedata.")
       .def("add", static_cast<void (Class::*)(const gsSparseMatrix<real_t> &) > (&Class::add<gsSparseMatrix<real_t>>), "Add gsSparseMatrix to the filedata.")
 
-      .def("addMatrix", static_cast<void (Class::*)(const gsMatrix<real_t> &) > (&Class::add<gsMatrix<real_t>>), "Add gsMatrix to the filedata.")
-      //.def("addSparse", static_cast<void (Class::*)(const gsSparseMatrix<real_t> &) > (&Class::add<gsSparseMatrix<real_t>>), "Add gsSparseMatrix to the filedata.")
-      
-      .def("getAnyFirst", static_cast<bool (Class::*)(gsMultiPatch<real_t> &) const > (&Class::getAnyFirst<gsMultiPatch<real_t>>), "Add gsMultiPatch to the filedata.")
+      .def("getAnyFirst", static_cast<bool (Class::*)(gsMultiPatch<real_t> &) const > (&Class::getAnyFirst<gsMultiPatch<real_t>>), "Get gsMultiPatch from the filedata.")
+      .def("getAnyFirst", static_cast<bool (Class::*)(gsMatrix<real_t> &) const > (&Class::getAnyFirst<gsMatrix<real_t>>), "Get gsMatrix from the filedata.")
 
       // Work around to obtain the matrix from Filedata. Standard way is not working!
       .def("getMatrix", &getMatrix, "Get any first gsMatrix.")
