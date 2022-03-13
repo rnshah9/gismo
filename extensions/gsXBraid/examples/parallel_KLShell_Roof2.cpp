@@ -27,14 +27,44 @@
 
 #include <gsKLShell/gsThinShellAssembler.h>
 #include <gsKLShell/getMaterialMatrix.h>
-// #include <gsThinShell/gsArcLengthIterator.h>
-#include <gsStructuralAnalysis/gsArcLengthIterator.h>
+#include <gsStructuralAnalysis/gsALMBase.h>
+#include <gsStructuralAnalysis/gsALMCrisfield.h>
+#include <gsStructuralAnalysis/gsHierarchicalALM.h>
 #include <gsStructuralAnalysis/gsSpaceTimeHierarchy.h>
+#include <gsStructuralAnalysis/gsAdaptiveSpaceTime.h>
 #include <gsStructuralAnalysis/gsSpaceTimeFitter.h>
 
 #include <gsHSplines/gsKdNode.h>
 
-double next_random();
+double                    next_random
+
+  ( void )
+
+{
+  static int  initialized = 0;
+  int         next;
+
+  if ( ! initialized )
+  {
+    int  my_rank;
+    int  flag;
+
+    MPI_Initialized ( &flag );
+
+    if ( flag )
+    {
+      MPI_Comm_rank ( MPI_COMM_WORLD, &my_rank );
+
+      srand ( (unsigned int) my_rank );
+    }
+
+    initialized = 1;
+  }
+
+  next = rand ();
+
+  return ((double) next / (double) RAND_MAX);
+}
 
 using namespace gismo;
 
@@ -42,7 +72,10 @@ template <class T>
 void initStepOutput( const std::string name, const gsMatrix<T> & points);
 
 template <class T>
-void writeStepOutput(const T lambda, const gsMultiPatch<T> & deformation, const std::string name, const gsMatrix<T> & points, const index_t extreme=-1, const index_t kmax=100);
+void writeStepOutput(const T lambda, const gsVector<T> & solution, const gsMultiPatch<T> & deformation, const std::string name, const gsMatrix<T> & points, const index_t extreme=-1, const index_t kmax=100);
+
+template <class T>
+void writeStepOutput2(const T lambda, const gsMultiPatch<T> & deformation, const std::string name, const gsMatrix<T> & points, const index_t extreme=-1, const index_t kmax=100);
 
 template<index_t dim, class T>
 gsTensorBSpline<dim,T> gsSpaceTimeFit(const std::vector<gsMatrix<T>> & solutionCoefs, const gsVector<T> & times, const gsVector<T> & ptimes, gsMultiBasis<T> & spatialBasis, index_t deg = 2);
@@ -51,8 +84,8 @@ gsTensorBSpline<dim,T> gsSpaceTimeFit(const std::vector<gsMatrix<T>> & solutionC
 int main(int argc, char **argv)
 {
 /////////////////////////////MPI/////////////////////////////
-  const int  N    = 100;
-  const int  root = 0;
+  // const int  N    = 100;
+  // const int  root = 0;
   const int  tag  = 1;
 
   double     number;
@@ -145,7 +178,7 @@ int main(int argc, char **argv)
 #endif
 
   // Initialize the MPI environment
-  const gsMpi & mpi = gsMpi::init();
+  const gsMpi & mpi = gsMpi::init(argc, argv);
 
   // Get current wall time
   double wtime = mpi.wallTime();
@@ -169,9 +202,6 @@ int main(int argc, char **argv)
   fd.getFirst<gsOptionList>(opts);
 
   gsMultiPatch<> mp;
-  real_t aDim;
-  real_t bDim;
-
 
   real_t thickness;
   real_t Exx, Eyy, Gxy;
@@ -352,31 +382,31 @@ int main(int argc, char **argv)
   assembler->assemble();
   gsVector<> Force = assembler->rhs();
 
-  gsArcLengthIterator<real_t> arcLength(Jacobian, ALResidual, Force);
+  gsALMCrisfield<real_t> * arcLength;;
+  arcLength = new gsALMCrisfield<real_t>(Jacobian, ALResidual, Force);
 
-  arcLength.options().setInt("Solver",0); // LDLT solver
-  arcLength.options().setInt("BifurcationMethod",0); // 0: determinant, 1: eigenvalue
-  arcLength.options().setInt("Method",method);
-  arcLength.options().setReal("Length",dL);
-  arcLength.options().setInt("AngleMethod",0); // 0: step, 1: iteration
-  arcLength.options().setSwitch("AdaptiveLength",adaptive);
-  arcLength.options().setInt("AdaptiveIterations",5);
-  arcLength.options().setReal("Scaling",0.0);
-  arcLength.options().setReal("Tol",tol);
-  arcLength.options().setReal("TolU",tolU);
-  arcLength.options().setReal("TolF",tolF);
-  arcLength.options().setInt("MaxIter",maxit);
-  arcLength.options().setSwitch("Verbose",true);
-  arcLength.options().setReal("Relaxation",relax);
+  arcLength->options().setInt("Solver",0); // LDLT solver
+  arcLength->options().setInt("BifurcationMethod",0); // 0: determinant, 1: eigenvalue
+  arcLength->options().setReal("Length",dL);
+  arcLength->options().setInt("AngleMethod",0); // 0: step, 1: iteration
+  arcLength->options().setSwitch("AdaptiveLength",adaptive);
+  arcLength->options().setInt("AdaptiveIterations",5);
+  arcLength->options().setReal("Scaling",0.0);
+  arcLength->options().setReal("Tol",tol);
+  arcLength->options().setReal("TolU",tolU);
+  arcLength->options().setReal("TolF",tolF);
+  arcLength->options().setInt("MaxIter",maxit);
+  arcLength->options().setSwitch("Verbose",true);
+  arcLength->options().setReal("Relaxation",relax);
   if (quasiNewtonInt>0)
   {
     quasiNewton = true;
-    arcLength.options().setInt("QuasiIterations",quasiNewtonInt);
+    arcLength->options().setInt("QuasiIterations",quasiNewtonInt);
   }
-  arcLength.options().setSwitch("Quasi",quasiNewton);
-  arcLength.applyOptions();
-  arcLength.initialize();
+  arcLength->options().setSwitch("Quasi",quasiNewton);
 
+  arcLength->applyOptions();
+  arcLength->initialize();
 
   gsMultiPatch<> deformation = mp;
 
@@ -394,9 +424,9 @@ int main(int argc, char **argv)
   int globalID = 0;
 
   // ID, start time, time step, start, guess, stop?
-  typedef std::tuple<index_t,real_t,real_t,solution_t,solution_t,bool> send_tuple_t;
-  // ID, solution, intermediate solution
-  typedef std::tuple<index_t,solution_t,solution_t> recv_tuple_t;
+  typedef std::tuple<index_t,real_t,real_t,real_t,solution_t,solution_t,bool> send_tuple_t;
+  // ID, solutions, times, distances
+  typedef std::tuple<index_t,std::vector<solution_t>,std::vector<real_t>,std::vector<real_t>> recv_tuple_t;
 
   // !MPI
 
@@ -412,7 +442,6 @@ int main(int argc, char **argv)
     std::vector<real_t> times;
     send_tuple_t send;
     recv_tuple_t receive;
-    index_t ID;
     real_t ttmp;
     real_t dLtmp;
     gsVector<> Utmp, Uref, Uguess, U0, Uold;
@@ -436,7 +465,7 @@ int main(int argc, char **argv)
       initStepOutput(dirname + "/" + line, writePoints);
     }
 
-    gsInfo<<arcLength.options();
+    gsInfo<<arcLength->options();
 
     Uold.setZero(Force.size(),1);
     U0.setZero(Force.size(),1);
@@ -444,7 +473,7 @@ int main(int argc, char **argv)
 
     gsMatrix<> solVector;
     real_t indicator = 0.0;
-    arcLength.setIndicator(indicator); // RESET INDICATOR
+    arcLength->setIndicator(indicator); // RESET INDICATOR
     real_t dL0 = dL;
 
     /*
@@ -462,6 +491,8 @@ int main(int argc, char **argv)
     gsInfo<<"\t\t\tLevel "<<level<<" (dL = "<<dL<<") -- Coarse grid \n";
     gsInfo<<"------------------------------------------------------------------------------------\n";
 
+    bool bisected = false;
+
     index_t stepi = step; // number of steps for level i
     stepi = step * (math::pow(2,level));
 
@@ -469,21 +500,42 @@ int main(int argc, char **argv)
     solutions.push_back({U0,L0});
     times.push_back(s);
     // Add other solutions
+    arcLength->setSolution(U0,L0);
+
+    gsMultiPatch<> mp_tmp;
     for (index_t k=1; k<stepi+1; k++)
     {
       s+=dL;
 
       gsInfo<<"Load step "<< k<<"\t"<<"dL = "<<dL<<"; curve time = "<<s<<"\n";
       // assembler->constructSolution(solVector,solution);
-      arcLength.step();
+      arcLength->step();
 
-      // gsInfo<<"m_U = "<<arcLength.solutionU()<<"\n";
-      if (!(arcLength.converged()))
-        GISMO_ERROR("Loop terminated, arc length method did not converge.\n");
+      if (!(arcLength->converged()))
+      {
+        s -= dL;
+        gsInfo<<"Error: Loop terminated, arc length method did not converge.\n";
+        dL = dL / 2.;
+        arcLength->setLength(dL);
+        arcLength->setSolution(Uold,Lold);
+        bisected = true;
+        k -= 1;
+        continue;
+      }
 
-      real_t lambda = arcLength.solutionL();
-      solutions.push_back({arcLength.solutionU(),lambda});
+      Uold = arcLength->solutionU();
+      Lold = arcLength->solutionL();
+
+      real_t lambda = arcLength->solutionL();
+      solutions.push_back({arcLength->solutionU(),lambda});
       times.push_back(s);
+
+      if (!bisected)
+      {
+        dL = dL0;
+        arcLength->setLength(dL);
+      }
+      bisected = false;
     }
 
     // Store solution coefficients in a matrix
@@ -491,7 +543,6 @@ int main(int argc, char **argv)
     // gsMatrix<> solutionCoefs(solutions.size(),3*blocksize);
     std::vector<gsMatrix<real_t>> solutionCoefs(solutions.size());
     gsVector<> loads(solutions.size());
-    gsMultiPatch<> mp_tmp;
 
     for (size_t k=0; k!= solutions.size(); k++)
     {
@@ -542,7 +593,7 @@ int main(int argc, char **argv)
         }
         if (write)
         {
-            writeStepOutput(lambda,deformation, dirname + "/" + line, writePoints,1, 201);
+            writeStepOutput2(lambda,deformation, dirname + "/" + line, writePoints,1, 201);
         }
       }
 
@@ -569,7 +620,7 @@ int main(int argc, char **argv)
           }
           if (write)
           {
-              writeStepOutput(lambda,deformation, dirname + "/" + wn, writePoints,1, 201);
+              writeStepOutput(lambda,solutions[k].first,deformation, dirname + "/" + wn, writePoints,1, 201);
           }
         }
       }
@@ -581,16 +632,29 @@ int main(int argc, char **argv)
       }
     }
 
-    gsSpaceTimeHierarchy<real_t,solution_t> hierarchy(times,solutions);
+    gsAdaptiveSpaceTime<real_t,solution_t> hierarchy(times,solutions);
     hierarchy.options().setInt("MaxLevel",5);
-    hierarchy.options().setInt("Split",true);
+    hierarchy.options().setInt("Split",false);
+    hierarchy.options().setReal("Tolerance",1e-1);
     hierarchy.init();
     hierarchy.printQueue();
-    hierarchy.printTree();
 
+    solution_t start, guess, reference;
+    index_t ID;
+    real_t tstart = 0;
+    real_t tend = 0;
+    real_t dt, dt0;
     index_t it = 0;
     index_t itmax = 100;
     real_t TOL = 1e-2;
+    gsVector<> DeltaU;
+    real_t DeltaL;
+    index_t Nintervals;
+    std::vector<solution_t> stepSolutions;
+    std::vector<real_t> stepTimes;
+    std::vector<real_t> distances;
+    bisected = false;
+    real_t dt_rem = 0;
 
     // MPI
     printf ("Adding workers ...\n");
@@ -600,17 +664,16 @@ int main(int argc, char **argv)
 
     // Send out initial jobs
 
-    solution_t start, guess, reference;
     while (!hierarchy.empty() && !m_workers.empty())
     {
-      std::tie(ID,ttmp,dLtmp,start,guess) = hierarchy.pop();
+      std::tie(ID,tstart,tend,dt0,start,guess) = hierarchy.pop();
       // ID, start time, time step, start, guess, stop?
-      send = std::make_tuple(ID,ttmp,dLtmp,start,guess,false);
+      send = std::make_tuple(ID,tstart,tend,dt0,start,guess,false);
 
       Utmp = start.first;
       Ltmp = start.second;
 
-      gsInfo<<"[MPI process "<<my_rank<<"] Sending a job to    "<<m_workers.front()<<": ID: "<<std::get<0>(send)<<"; t = "<<std::get<1>(send)<<"; |U| = "<<Utmp<<"; L = "<<Ltmp<<"\n";
+      gsInfo<<"[MPI process "<<my_rank<<"] Sending a job to    "<<m_workers.front()<<": ID: "<<std::get<0>(send)<<"; t = "<<std::get<1>(send)<<"; |U| = "<<Utmp.norm()<<"; L = "<<Ltmp<<"\n";
       comm.isend(&send, 1, m_workers.front(),&req,tag);
       m_workers.pop();
       njobs++;
@@ -621,59 +684,39 @@ int main(int argc, char **argv)
       gsInfo<<njobs<<" job(s) running\n";
       comm.recv(&receive,1,MPI_ANY_SOURCE,tag,&status);
       ID = std::get<0>(receive);
-      Utmp = std::get<1>(receive).first;
-      Ltmp = std::get<1>(receive).second;
-      gsInfo<<"[MPI process "<<my_rank<<"] Received a job from "<<status.MPI_SOURCE<<": ID: "<<std::get<0>(receive)<<"; |U| = "<<std::get<2>(receive).first<<"; L = "<<std::get<2>(receive).second<<"\n";
+      stepSolutions = std::get<1>(receive);
+      stepTimes = std::get<2>(receive);
+      distances = std::get<3>(receive);
+      gsInfo<<"[MPI process "<<my_rank<<"] Received a job from "<<status.MPI_SOURCE<<": ID: "<<std::get<0>(receive)<<"\n";
       njobs--;
       m_workers.push(status.MPI_SOURCE);
 
       ///// Validate
-      hierarchy.submit(ID,std::make_pair(Utmp,Ltmp));
-      bool success = hierarchy.getReference(ID,reference);
+      bool success = hierarchy.getReferenceByID(ID,reference);
+      GISMO_ASSERT(success,"Reference not found");
+      DeltaU = reference.first - stepSolutions.back().first;
+      DeltaL = reference.second - stepSolutions.back().second;
+      distances.back() = arcLength->distance(DeltaU,DeltaL);
+      gsDebugVar(arcLength->distance(DeltaU,DeltaL));
 
-      if (success)
-      {
-        std::tie(Uref,Lref) = reference;
-      }
-      else
-      {
-        fit.slice(2,ttmp+dLtmp,target);
-        gsGeometry<real_t> * slice = target.clone().release();
-        Lref  = slice->coefs()(0,3);
-        slice->embed(3);
-        gsMultiPatch<> mp_tmp2(*slice);
-        mp_tmp2.patch(0).coefs() -= mp.patch(0).coefs();
-        Uref = assembler->constructSolutionVector(mp_tmp2);
-      }
+      hierarchy.submit(ID,distances,stepTimes,stepSolutions);
+      hierarchy.addJobs(ID);
+      hierarchy.finishJob(ID);
 
       gsDebugVar(Lref);
       gsDebugVar(Uref.norm());
 
-      gsVector<> DeltaU = Uref - arcLength.solutionU();
-      real_t DeltaL = Lref - arcLength.solutionL();
-
-      real_t error = arcLength.distance(DeltaU,DeltaL) / (dLtmp);
-
-      gsDebugVar(error);
-
-      if (error > TOL)
-      {
-        gsDebug<<"ERROR > TOL\n";
-        hierarchy.addJob(ID);
-      }
-
-      hierarchy.removeJob(ID);
-
       ///// Send again
       while (!hierarchy.empty() && !m_workers.empty())
       {
-        std::tie(ID,ttmp,dLtmp,start,guess) = hierarchy.pop();
-        send = std::make_tuple(ID,ttmp,dLtmp,start,guess,false);
+        std::tie(ID,tstart,tend,dt0,start,guess) = hierarchy.pop();
+        // ID, start time, time step, start, guess, stop?
+        send = std::make_tuple(ID,tstart,tend,dt0,start,guess,false);
 
         Utmp = start.first;
         Ltmp = start.second;
 
-        gsInfo<<"[MPI process "<<my_rank<<"] Sending a job to    "<<m_workers.front()<<": ID: "<<std::get<0>(send)<<"; t = "<<std::get<1>(send)<<"; |U| = "<<Utmp<<"; L = "<<Ltmp<<"\n";
+        gsInfo<<"[MPI process "<<my_rank<<"] Sending a job to    "<<m_workers.front()<<": ID: "<<std::get<0>(send)<<"; t = "<<std::get<1>(send)<<"; |U| = "<<Utmp.norm()<<"; L = "<<Ltmp<<"\n";
         comm.isend(&send, 1, m_workers.front(),&req,tag);
         m_workers.pop();
         njobs++;
@@ -681,7 +724,7 @@ int main(int argc, char **argv)
     }
 
     ///// Send stop signal
-    std::get<5>(send) = true;
+    std::get<6>(send) = true;
     for (int w = 1; w!=proc_count; w++)
       comm.isend(&send, 1,w,&req,tag);
 
@@ -689,7 +732,10 @@ int main(int argc, char **argv)
     //Postprocess////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////
 
+    hierarchy.printQueue();
     std::tie(times,solutions) = hierarchy.getFlatSolution();
+
+    hierarchy.printKnots();
 
     gsDebugVar(gsAsVector(times));
 
@@ -714,137 +760,177 @@ int main(int argc, char **argv)
 
     if (plot || write)
     {
-      gsVector<> xi;
-      xi.setLinSpaced(100,times[0],0.99999*times[times.size()-1]);
-
-      for (index_t k = 0; k!=xi.size(); k++)
+      for (size_t k=0; k!= solutions.size(); k++)
       {
-        fit2.slice(2,xi.at(k),target);
-        gsGeometry<real_t> * slice = target.clone().release();
-        real_t lambda = slice->coefs()(0,3);
-        slice->embed(3);
+        assembler->constructSolution(solutions[k].first,mp_tmp);
 
-        deformation.patch(0) = *slice;
+        real_t lambda = solutions[k].second;
+
+        real_t Time = times[k];
+
+        deformation.patch(0) = mp_tmp.patch(0);
         deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
 
         if (plot)
         {
           solField = gsField<>(mp,deformation);
-          gsWriteParaview(solField,"slice");
-
-          gsDebugVar(xi[k]);
-
-          std::string fileName = dirname + "/" + output + util::to_string(k);
+          std::string fileName = dirname + "/" + "data" + util::to_string(k);
           gsWriteParaview<>(solField, fileName, 1000,mesh);
-          fileName = output + util::to_string(k) + "0";
-          collection2.addTimestep(fileName,0,xi[k],".vts");
-          if (mesh) collection2.addTimestep(fileName,0,xi[k],"_mesh.vtp");
+          fileName = "data" + util::to_string(k) + "0";
+          datacollection2.addTimestep(fileName,0,Time,".vts");
+          if (mesh) datacollection2.addTimestep(fileName,0,Time,"_mesh.vtp");
         }
         if (write)
         {
-            writeStepOutput(lambda,deformation, dirname + "/" + line, writePoints,1, 201);
+            writeStepOutput(lambda,solutions[k].first,deformation, dirname + "/" + wn, writePoints,1, 201);
         }
       }
+    }
 
-      {
-        for (index_t k=0; k!= solutions.size(); k++)
-        {
-          assembler->constructSolution(solutions[k].first,mp_tmp);
-
-          real_t lambda = solutions[k].second;
-
-          real_t Time = times[k];
-
-          deformation.patch(0) = mp_tmp.patch(0);
-          deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
-
-          if (plot)
-          {
-            solField = gsField<>(mp,deformation);
-            std::string fileName = dirname + "/" + "data" + util::to_string(k);
-            gsWriteParaview<>(solField, fileName, 1000,mesh);
-            fileName = "data" + util::to_string(k) + "0";
-            datacollection2.addTimestep(fileName,0,Time,".vts");
-            if (mesh) datacollection2.addTimestep(fileName,0,Time,"_mesh.vtp");
-          }
-          if (write)
-          {
-              writeStepOutput(lambda,deformation, dirname + "/" + wn, writePoints,1, 201);
-          }
-        }
-      }
-
-      if (plot)
-      {
-        collection2.save();
-        datacollection2.save();
-      }
+    if (plot)
+    {
+      collection2.save();
+      datacollection2.save();
     }
 
 
   }
-  // }
   // MPI rank != 0
   else
   {
-    send_tuple_t receive;
-    recv_tuple_t send;
-    solution_t sol;
-    solution_t emptysol;
-    index_t ID;
-    real_t ttmp;
-    real_t dLtmp;
-    gsVector<> Uold, Uguess;
-    real_t Lold, Lguess;
     while (true)
     {
+      send_tuple_t receive;
+      recv_tuple_t send;
+
+      solution_t sol;
+      solution_t emptysol;
+      index_t ID;
+      real_t tstart,tend,dt0, dt;
+      real_t dLtmp;
+      gsVector<> Uold, Uguess;
+      real_t Lold, Lguess;
+
+      gsVector<> DeltaU;
+      real_t DeltaL;
+
+      index_t Nintervals;
+      std::vector<solution_t> stepSolutions;
+      std::vector<real_t> stepTimes;
+      std::vector<real_t> distances;
+      bool bisected = false;
+      real_t dt_rem = 0;
+
+      Nintervals = 2;
+      stepSolutions.resize(Nintervals);
+      stepTimes.resize(Nintervals);
+      distances.resize(Nintervals+1);
+
       gsInfo<<"[MPI process "<<my_rank<<"] Start!!"<<"\n";
       gsDebugVar(proc_count);
 
-      comm.recv(&receive,1,0,tag,MPI_STATUS_IGNORE);
+      comm.recv(&receive,1,0);//,tag,MPI_STATUS_IGNORE);
+      gsDebugVar("Received!!");
 
-      if (std::get<5>(receive))
+      if (std::get<6>(receive))
       {
         gsInfo<<"[MPI process "<<my_rank<<"] I have to stop!!"<<"\n";
         break;
       }
 
       ID = std::get<0>(receive);
-      ttmp = std::get<1>(receive);
-      dLtmp = std::get<2>(receive);
-      Uold = std::get<3>(receive).first;
-      Lold = std::get<3>(receive).second;
-      Uguess = std::get<4>(receive).first;
-      Lguess = std::get<4>(receive).second;
+      tstart = std::get<1>(receive);
+      tend = std::get<2>(receive);
+      dt0 = std::get<3>(receive);
+      Uold = std::get<4>(receive).first;
+      Lold = std::get<4>(receive).second;
+      Uguess = std::get<5>(receive).first;
+      Lguess = std::get<5>(receive).second;
 
-      gsInfo<<"[MPI process "<<my_rank<<"] Received a job from "<<0<<": ID: "<<ID<<"; t = "<<ttmp<<"; dL = "<<dLtmp<<"; |U| = "<<Uold.norm()<<"; L = "<<Lold<<"; |Ug| = "<<Uguess.norm()<<"; Lg = "<<Lguess<<"\n";
+      gsInfo<<"[MPI process "<<my_rank<<"] Received a job from "<<0<<": ID: "<<ID<<"; tstart = "<<tstart<<"; tend = "<<tend<<"; dt0 = "<<dt0<<"; |U| = "<<Uold.norm()<<"; L = "<<Lold<<"; |Ug| = "<<Uguess.norm()<<"; Lg = "<<Lguess<<"\n";
 
-      gsDebugVar(ttmp);
-      gsDebugVar(dLtmp);
+      gsDebugVar(tstart);
+      gsDebugVar(tend);
+      gsDebugVar(dt0);
 
-      arcLength.setLength(dLtmp);
-      arcLength.setSolution(Uold,Lold);
-      arcLength.resetStep();
+      dt0 = dt0 / Nintervals;
+      dt = dt0;
 
-      arcLength.setInitialGuess(Uguess,Lguess);
+      arcLength->setLength(dt);
+      arcLength->setSolution(Uold,Lold);
+      arcLength->resetStep();
 
-      gsInfo<<"Starting with ID "<<ID<<" from (|U|,L) = ("<<","<<Uold.norm()<<","<<Lold<<"), curve time = "<<ttmp<<"\n";
+      // arcLength->setInitialGuess(Uguess,Lguess);
 
-      arcLength.step();
+      real_t s = 0;
 
-      sol.first = arcLength.solutionU();
-      sol.second = arcLength.solutionL();
+      gsInfo<<"Starting with ID "<<ID<<" from (|U|,L) = ("<<Uold.norm()<<","<<Lold<<"), curve time = "<<tstart<<"\n";
+      for (index_t k = 0; k!=Nintervals; k++)
+      {
+        gsDebug<<"Interval "<<k+1<<" of "<<Nintervals<<"\n";
+        gsDebug<<"Start - ||u|| = "<<Uold.norm()<<", L = "<<Lold<<"\n";
+        gsDebug<<"Guess - ||u|| = "<<Uguess.norm()<<", L = "<<Lguess<<"\n";
 
-      send = std::make_tuple(ID,sol,emptysol);
+        arcLength->step();
+        if (!(arcLength->converged()))
+        {
+          gsInfo<<"Error: Loop terminated, arc length method did not converge.\n";
+          dt = dt / 2.;
+          dt_rem += dt; // add the remainder of the interval to dt_rem
+          arcLength->setLength(dt);
+          arcLength->setSolution(Uold,Lold);
+          bisected = true;
+          k -= 1;
+          continue;
+        }
+        GISMO_ENSURE(arcLength->converged(),"Loop terminated, arc length method did not converge.\n");
+
+        stepSolutions.at(k) = std::make_pair(arcLength->solutionU(),arcLength->solutionL());
+        stepTimes.at(k) = tstart + dt;
+        DeltaU = arcLength->solutionU() - Uold;
+        DeltaL = arcLength->solutionL() - Lold;
+
+        distances.at(k) = arcLength->distance(DeltaU,DeltaL);
+        gsDebugVar(arcLength->distance(DeltaU,DeltaL));
+
+        s += distances.at(k);
+
+        Uold = arcLength->solutionU();
+        Lold = arcLength->solutionL();
+
+        if (!bisected) // if bisected = false
+          dt = dt0;
+        else
+        {
+          // if the current interval has finished, but was refined before.
+          // The next interval should have the remaining length.
+          // Also, Nintervals should increase
+          //
+          dt = dt_rem;
+          Nintervals++;
+          stepSolutions.resize(Nintervals);
+          stepTimes.resize(Nintervals);
+          distances.resize(Nintervals+1);
+        }
+
+        arcLength->setLength(dt);
+        dt_rem = 0;
+        bisected = false;
+      }
+
+      gsDebugVar(s);
+
+      send = std::make_tuple(ID,stepSolutions,stepTimes,distances);
 
       gsStopwatch time;
-      gsInfo<<"[MPI process "<<my_rank<<"] Sending a job to    "<<0<<": ID: "<<ID<<"; |U| = "<<arcLength.solutionU().norm()<<"; L = "<<arcLength.solutionL()<<" (worked for "<<time.stop()<<" seconds)\n";
+      gsInfo<<"[MPI process "<<my_rank<<"] Sending a job to    "<<0<<": ID: "<<ID<<"; |U| = "<<arcLength->solutionU().norm()<<"; L = "<<arcLength->solutionL()<<" (worked for "<<time.stop()<<" seconds)\n";
       comm.send(&send,1,0,tag);
     }
 
     // MPI Send
 
   }
+  delete arcLength;
   return 0;
 }
 
@@ -871,7 +957,72 @@ void initStepOutput(const std::string name, const gsMatrix<T> & points)
 }
 
 template <class T>
-void writeStepOutput(const T lambda, const gsMultiPatch<T> & deformation, const std::string name, const gsMatrix<T> & points, const index_t extreme, const index_t kmax) // extreme: the column of point indices to compute the extreme over (default -1)
+void writeStepOutput(const T lambda, const gsVector<T> & solution, const gsMultiPatch<T> & deformation, const std::string name, const gsMatrix<T> & points, const index_t extreme, const index_t kmax) // extreme: the column of point indices to compute the extreme over (default -1)
+{
+  gsMatrix<T> P(2,1), Q(2,1);
+  gsMatrix<T> out(3,points.cols());
+  gsMatrix<T> tmp;
+
+  for (index_t p=0; p!=points.cols(); p++)
+  {
+    P<<points.col(p);
+    deformation.patch(0).eval_into(P,tmp);
+    out.col(p) = tmp;
+  }
+
+  std::ofstream file;
+  file.open(name,std::ofstream::out | std::ofstream::app);
+  if (extreme==-1)
+  {
+    file  << std::setprecision(6)
+          << solution.norm() << ",";
+          for (index_t p=0; p!=points.cols(); p++)
+          {
+            file<< out(0,p) << ","
+                << out(1,p) << ","
+                << out(2,p) << ",";
+          }
+
+    file  << lambda << ","
+          << "NA" << ","
+          << "\n";
+  }
+  else if (extreme==0 || extreme==1)
+  {
+    gsMatrix<T> out2(kmax,points.cols()); // evaluation points in the rows, output (per coordinate) in columns
+    for (int p = 0; p != points.cols(); p ++)
+    {
+      Q.at(1-extreme) = points(1-extreme,p);
+      for (int k = 0; k != kmax; k ++)
+      {
+        Q.at(extreme) = 1.0*k/(kmax-1);
+        deformation.patch(0).eval_into(Q,tmp);
+        out2(k,p) = tmp.at(2); // z coordinate
+      }
+    }
+
+    file  << std::setprecision(6)
+          << solution.norm() << ",";
+          for (index_t p=0; p!=points.cols(); p++)
+          {
+            file<< out(0,p) << ","
+                << out(1,p) << ","
+                << std::max(abs(out2.col(p).maxCoeff()),abs(out2.col(p).minCoeff())) << ",";
+          }
+
+    file  << lambda << ","
+          << "NA" << ","
+          << "\n";
+  }
+  else
+    GISMO_ERROR("Extremes setting unknown");
+
+  file.close();
+}
+
+
+template <class T>
+void writeStepOutput2(const T lambda, const gsMultiPatch<T> & deformation, const std::string name, const gsMatrix<T> & points, const index_t extreme, const index_t kmax) // extreme: the column of point indices to compute the extreme over (default -1)
 {
   gsMatrix<T> P(2,1), Q(2,1);
   gsMatrix<T> out(3,points.cols());

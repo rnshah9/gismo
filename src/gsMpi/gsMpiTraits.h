@@ -453,6 +453,62 @@ namespace gismo
 
   template<typename T1, typename T2, typename T3, typename T4, typename T5, typename T6>
   MPI_Datatype MPITraits<std::tuple<T1,T2,T3,T4,T5,T6> >::type=MPI_DATATYPE_NULL;
+
+  template<typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7>
+  struct MPITraits<std::tuple<T1,T2,T3,T4,T5,T6,T7> >
+  {
+  public:
+    inline static MPI_Datatype getType();
+  private:
+    static MPI_Datatype type;
+  };
+  template<typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7>
+  MPI_Datatype MPITraits<std::tuple<T1,T2,T3,T4,T5,T6,T7> >::getType()
+  {
+    if(type==MPI_DATATYPE_NULL)
+    {
+        int length[7] = {1, 1, 1, 1, 1, 1, 1};
+        MPI_Aint disp[7];
+        MPI_Datatype types[7] = {MPITraits<T1>::getType(),
+                                 MPITraits<T2>::getType(),
+                                 MPITraits<T3>::getType(),
+                                 MPITraits<T4>::getType(),
+                                 MPITraits<T5>::getType(),
+                                 MPITraits<T6>::getType(),
+                                 MPITraits<T7>::getType()};
+
+        typedef std::tuple<T1, T2, T3, T4, T5, T6, T7> Tuple7;
+        Tuple7 dummy_tuple;
+        MPI_Aint base_address;
+
+        MPI_Get_address(&dummy_tuple, &base_address);
+        MPI_Get_address(&(std::get<0>(dummy_tuple)), &disp[0]);
+        MPI_Get_address(&(std::get<1>(dummy_tuple)), &disp[1]);
+        MPI_Get_address(&(std::get<2>(dummy_tuple)), &disp[2]);
+        MPI_Get_address(&(std::get<3>(dummy_tuple)), &disp[3]);
+        MPI_Get_address(&(std::get<4>(dummy_tuple)), &disp[4]);
+        MPI_Get_address(&(std::get<5>(dummy_tuple)), &disp[5]);
+        MPI_Get_address(&(std::get<6>(dummy_tuple)), &disp[6]);
+        disp[0] = MPI_Aint_diff(disp[0], base_address);
+        disp[1] = MPI_Aint_diff(disp[1], base_address);
+        disp[2] = MPI_Aint_diff(disp[2], base_address);
+        disp[3] = MPI_Aint_diff(disp[3], base_address);
+        disp[4] = MPI_Aint_diff(disp[4], base_address);
+        disp[5] = MPI_Aint_diff(disp[5], base_address);
+        disp[6] = MPI_Aint_diff(disp[6], base_address);
+
+        MPI_Datatype tmp;
+        MPI_Type_create_struct(7, length, disp, types, &tmp);
+
+        MPI_Type_create_resized(tmp, 0, sizeof(Tuple7), &type);
+        MPI_Type_commit(&type);
+        MPI_Type_free(&tmp);
+    }
+    return type;
+  }
+
+  template<typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7>
+  MPI_Datatype MPITraits<std::tuple<T1,T2,T3,T4,T5,T6,T7> >::type=MPI_DATATYPE_NULL;
 }
 
 #endif

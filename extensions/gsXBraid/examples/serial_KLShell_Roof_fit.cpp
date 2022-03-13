@@ -17,7 +17,6 @@
 #include <gsKLShell/getMaterialMatrix.h>
 #include <gsStructuralAnalysis/gsALMBase.h>
 #include <gsStructuralAnalysis/gsALMCrisfield.h>
-#include <gsStructuralAnalysis/gsALMRiks.h>
 #include <gsStructuralAnalysis/gsHierarchicalALM.h>
 #include <gsStructuralAnalysis/gsSpaceTimeHierarchy.h>
 #include <gsStructuralAnalysis/gsAdaptiveSpaceTime.h>
@@ -40,6 +39,12 @@ void writeStepOutput2(const T lambda, const gsMultiPatch<T> & deformation, const
 
 template<index_t dim, class T>
 gsTensorBSpline<dim,T> gsSpaceTimeFit(const std::vector<gsMatrix<T>> & solutionCoefs, const gsVector<T> & times, const gsVector<T> & ptimes, gsMultiBasis<T> & spatialBasis, index_t deg = 2);
+
+template<class T>
+gsBSpline<T> gsSolutionFit(const std::vector<gsVector<T>> & solutions, const gsVector<T> & times, const gsVector<T> & ptimes, index_t deg = 2);
+
+template<class T>
+gsMatrix<T> nearestPoint(const gsMatrix<T>& spacePoint, const gsBSpline<T> &bspline, index_t nTrialPoints = 20, index_t nIterations = 50);
 
 
 int main (int argc, char** argv)
@@ -319,7 +324,6 @@ int main (int argc, char** argv)
 
     gsALMBase<real_t> * arcLength;
     arcLength = new gsALMCrisfield<real_t>(Jacobian, ALResidual, Force);
-    // arcLength = new gsALMRiks<real_t>(Jacobian, ALResidual, Force);
 
     arcLength->options().setInt("Solver",0); // LDLT solver
     arcLength->options().setInt("BifurcationMethod",0); // 0: determinant, 1: eigenvalue
@@ -455,13 +459,6 @@ int main (int argc, char** argv)
     file.close();
     //////////////////////////////////////////////////////////////////////////////////////////////
 
-    // gsAdaptiveSpaceTime<real_t,solution_t> init(times);
-    // init.init();
-    // init.printQueue();
-    // gsAdaptiveSpaceTime<real_t,solution_t> hierarchy2(times,solutions);
-    // hierarchy2.init();
-    // hierarchy2.printQueue();
-
     /////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////////////
@@ -470,12 +467,14 @@ int main (int argc, char** argv)
     // index_t blocksize = mp.patch(0).coefs().rows();
     // gsMatrix<> solutionCoefs(solutions.size(),3*blocksize);
     std::vector<gsMatrix<real_t>> solutionCoefs(solutions.size());
+    std::vector<gsVector<real_t>> solutionContainer(solutions.size());
     gsVector<> loads(solutions.size());
 
     for (size_t k=0; k!= solutions.size(); k++)
     {
       assembler->constructSolution(solutions[k].first,mp_tmp);
       solutionCoefs.at(k) = mp_tmp.patch(0).coefs();
+      solutionContainer.at(k) = solutions[k].first;
 
       // solutionCoefs.row(k) = mp_tmp.patch(0).coefs().reshape(1,3*blocksize);
 
@@ -483,8 +482,26 @@ int main (int argc, char** argv)
     }
 
     gsTensorBSpline<3,real_t> fit = gsSpaceTimeFit<3,real_t>(solutionCoefs,loads,gsAsVector<>(times),dbasis,deg_z);
+    gsBSpline<real_t> cfit = gsSolutionFit<real_t>(solutionContainer,loads,gsAsVector<>(times),deg_z);
+
+    gsMatrix<> pt1d(1,1);
+    pt1d<<times.at(1);
+    gsDebugVar(cfit.eval(pt1d));
+    gsDebugVar(solutions[1].first);
 
     typename gsTensorBSpline<3,real_t>::BoundaryGeometryType target;
+
+
+    // gsVector<> pt(2);
+    // pt.setConstant(0.25);
+    // gsDebugVar()
+
+    gsMatrix<> spacePoint(solutions[1].first.size()+1,1);
+    spacePoint.block(0,0,solutions[1].first.size(),1) = solutions[1].first;
+    spacePoint(solutions[1].first.size(),0) = solutions[1].second;
+    gsMatrix<> bla = nearestPoint<real_t>(spacePoint,cfit);
+    gsDebugVar(bla);
+    gsDebugVar(times[1]);
 
     gsParaviewCollection collection(dirname + "/" + output);
     gsParaviewCollection datacollection(dirname + "/" + "data");
@@ -494,7 +511,7 @@ int main (int argc, char** argv)
     if (plot || write)
     {
       gsVector<> xi;
-      xi.setLinSpaced(100,times[0],times[times.size()-1]);
+      xi.setLinSpaced(100,times[0],times[times.size()-1]-0.000001);
 
       for (index_t k = 0; k!=xi.size(); k++)
       {
@@ -559,220 +576,6 @@ int main (int argc, char** argv)
         datacollection.save();
       }
     }
-    /////////////////////////////////////////////////////////////////////////////////////////////
-    /////////////////////////////////////////////////////////////////////////////////////////////
-    /////////////////////////////////////////////////////////////////////////////////////////////
-
-    gsAdaptiveSpaceTime<real_t,solution_t> hierarchy(times,solutions);
-    hierarchy.options().setInt("MaxLevel",2);
-    hierarchy.options().setInt("Split",false);
-    hierarchy.options().setReal("Tolerance",2e-1);
-    hierarchy.init();
-    hierarchy.printQueue();
-
-    solution_t start, guess, reference;
-    index_t ID;
-    real_t tstart = 0;
-    real_t tend = 0;
-    real_t dt, dt0;
-    index_t it = 0;
-    index_t itmax = 100;
-    real_t TOL = 1e-2;
-    gsVector<> DeltaU;
-    real_t DeltaL;
-    index_t Nintervals;
-    std::vector<solution_t> stepSolutions;
-    std::vector<real_t> stepTimes;
-    std::vector<real_t> distances;
-    bisected = false;
-    real_t dt_rem = 0;
-
-    while (!hierarchy.empty() && it < itmax)
-    {
-      //////////////////////////////////////////////////////////////////////////////////////////////
-      file.open("it_" + std::to_string(it) + ".txt",std::ofstream::out);
-      //////////////////////////////////////////////////////////////////////////////////////////////
-      gsDebugVar(it);
-
-      Nintervals = 4;
-      stepSolutions.resize(Nintervals);
-      stepTimes.resize(Nintervals);
-      distances.resize(Nintervals+1);
-
-      std::tie(ID,tstart,tend,dt0,start,guess) = hierarchy.pop();
-      std::tie(Uold,Lold) = start;
-      std::tie(Uguess,Lguess) = guess;
-
-      gsMatrix<> Uori = Uold;
-      real_t Lori = Lold;
-
-      gsDebugVar(dt0);
-
-      dt0 = dt0 / Nintervals;
-      dt = dt0;
-
-      arcLength->setLength(dt);
-      arcLength->setSolution(Uold,Lold);
-      arcLength->resetStep();
-
-      //////////////////////////////////////////////////////////////////////////////////////////////
-      assembler->constructSolution(Uold,mp_tmp);
-      deformation.patch(0) = mp_tmp.patch(0);
-      deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
-      deformation.patch(0).eval_into(pt,pt_result);
-      file  << std::setprecision(20) << pt_result(2,0) << "," << Lold<<"\n";
-      //////////////////////////////////////////////////////////////////////////////////////////////
-
-      real_t s = 0;
-
-      gsInfo<<"Starting with ID "<<ID<<" from (|U|,L) = ("<<Uold.norm()<<","<<Lold<<"), curve time = "<<tstart<<"\n";
-      for (index_t k = 0; k!=Nintervals; k++)
-      {
-        arcLength->setInitialGuess(Uguess,Lguess);
-
-        gsDebug<<"Interval "<<k+1<<" of "<<Nintervals<<"\n";
-        gsDebug<<"Start - ||u|| = "<<Uold.norm()<<", L = "<<Lold<<"\n";
-        gsDebug<<"Guess - ||u|| = "<<Uguess.norm()<<", L = "<<Lguess<<"\n";
-
-        arcLength->step();
-        if (!(arcLength->converged()))
-        {
-          gsInfo<<"Error: Loop terminated, arc length method did not converge.\n";
-          dt = dt / 2.;
-          dt_rem += dt; // add the remainder of the interval to dt_rem
-          arcLength->setLength(dt);
-          arcLength->setSolution(Uold,Lold);
-          bisected = true;
-          k -= 1;
-          continue;
-        }
-        GISMO_ENSURE(arcLength->converged(),"Loop terminated, arc length method did not converge.\n");
-
-        stepSolutions.at(k) = std::make_pair(arcLength->solutionU(),arcLength->solutionL());
-        stepTimes.at(k) = tstart + dt;
-        DeltaU = arcLength->solutionU() - Uold;
-        DeltaL = arcLength->solutionL() - Lold;
-
-        distances.at(k) = arcLength->distance(DeltaU,DeltaL);
-        gsDebugVar(arcLength->distance(DeltaU,DeltaL));
-
-        s += distances.at(k);
-
-        Uold = arcLength->solutionU();
-        Lold = arcLength->solutionL();
-
-        //////////////////////////////////////////////////////////////////////////////////////////////
-        assembler->constructSolution(Uold,mp_tmp);
-        deformation.patch(0) = mp_tmp.patch(0);
-        deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
-        deformation.patch(0).eval_into(pt,pt_result);
-        file  << std::setprecision(20) << pt_result(2,0) << "," << Lold<<"\n";
-        //////////////////////////////////////////////////////////////////////////////////////////////
-
-        if (!bisected) // if bisected = false
-          dt = dt0;
-        else
-        {
-          // if the current interval has finished, but was refined before.
-          // The next interval should have the remaining length.
-          // Also, Nintervals should increase
-          //
-          dt = dt_rem;
-          Nintervals++;
-          stepSolutions.resize(Nintervals);
-          stepTimes.resize(Nintervals);
-          distances.resize(Nintervals+1);
-        }
-
-        arcLength->setLength(dt);
-        dt_rem = 0;
-        bisected = false;
-      }
-
-      gsDebugVar(s);
-
-      bool success = hierarchy.getReferenceByID(ID,reference);
-      GISMO_ASSERT(success,"Reference not found");
-      DeltaU = reference.first - arcLength->solutionU();
-      DeltaL = reference.second - arcLength->solutionL();
-      distances.back() = arcLength->distance(DeltaU,DeltaL);
-      gsDebugVar(arcLength->distance(DeltaU,DeltaL));
-
-      DeltaU = arcLength->solutionU() - Uori;
-      DeltaL = arcLength->solutionL() - Lori;
-      gsDebugVar(arcLength->distance(DeltaU,DeltaL));
-
-      s += distances.back();
-      gsDebugVar(s);
-
-
-      //////////////////////////////////////////////////////////////////////////////////////////////
-      assembler->constructSolution(reference.first,mp_tmp);
-      deformation.patch(0) = mp_tmp.patch(0);
-      deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
-      deformation.patch(0).eval_into(pt,pt_result);
-      file  << std::setprecision(20) << pt_result(2,0) << "," << reference.second<<"\n";
-      //////////////////////////////////////////////////////////////////////////////////////////////
-      file.close();
-
-
-      hierarchy.submit(ID,distances,stepTimes,stepSolutions);
-      hierarchy.addJobs(ID);
-      hierarchy.finishJob(ID);
-      it++;
-    }
-
-    hierarchy.printQueue();
-    std::tie(times,solutions) = hierarchy.getFlatSolution();
-
-    hierarchy.printKnots();
-
-    gsDebugVar(gsAsVector(times));
-
-
-    /////////////////////////////////////////////////////////////////////////////////////////////
-    /////////////////////////////////////////////////////////////////////////////////////////////
-    /////////////////////////////////////////////////////////////////////////////////////////////
-
-    gsParaviewCollection collection2(dirname + "/" + output + "_refit");
-    gsParaviewCollection datacollection2(dirname + "/" + "data" + "_refit");
-
-
-    if (plot || write)
-    {
-      for (size_t k=0; k!= solutions.size(); k++)
-      {
-        assembler->constructSolution(solutions[k].first,mp_tmp);
-
-        real_t lambda = solutions[k].second;
-
-        real_t Time = times[k];
-
-        deformation.patch(0) = mp_tmp.patch(0);
-        deformation.patch(0).coefs() -= mp.patch(0).coefs();// assuming 1 patch here
-
-        if (plot)
-        {
-          solField = gsField<>(mp,deformation);
-          std::string fileName = dirname + "/" + "data" + util::to_string(k);
-          gsWriteParaview<>(solField, fileName, 1000,mesh);
-          fileName = "data" + util::to_string(k) + "0";
-          datacollection2.addTimestep(fileName,0,Time,".vts");
-          if (mesh) datacollection2.addTimestep(fileName,0,Time,"_mesh.vtp");
-        }
-        if (write)
-        {
-            writeStepOutput(lambda,solutions[k].first,deformation, dirname + "/" + wn, writePoints,1, 201);
-        }
-      }
-    }
-
-  if (plot)
-  {
-    collection2.save();
-    datacollection2.save();
-  }
-
 
   delete arcLength;
   return result;
@@ -932,7 +735,7 @@ void writeStepOutput2(const T lambda, const gsMultiPatch<T> & deformation, const
 template<index_t dim, class T>
 gsTensorBSpline<dim,T> gsSpaceTimeFit(const std::vector<gsMatrix<T>> & solutionCoefs, const gsVector<T> & times, const gsVector<T> & ptimes, gsMultiBasis<T> & spatialBasis, index_t deg)
 {
-  GISMO_ASSERT(solutionCoefs.size()==times.rows(),"Number of time and solution steps should match! "<<solutionCoefs.size()<<"!="<<times.rows());
+  GISMO_ASSERT(solutionCoefs.size()==(size_t)(times.rows()),"Number of time and solution steps should match! "<<solutionCoefs.size()<<"!="<<times.rows());
   GISMO_ASSERT(solutionCoefs.at(0).cols() == dim,"Is the dimension correct?"<<solutionCoefs.at(0).cols() <<"!="<<dim);
   index_t nsteps = times.rows();
   index_t bsize = solutionCoefs.at(0).rows();
@@ -987,6 +790,104 @@ gsTensorBSpline<dim,T> gsSpaceTimeFit(const std::vector<gsMatrix<T>> & solutionC
   // gsTensorBSpline<3,T> tspline = tbasis.makeGeometry(give(coefs)).release();
   gsTensorBSpline<dim,T> tspline(tbasis,give(coefs));
   return tspline;
+}
+
+template<class T>
+gsBSpline<T> gsSolutionFit(const std::vector<gsVector<T>> & solutionCoefs, const gsVector<T> & times, const gsVector<T> & ptimes, index_t deg)
+{
+  GISMO_ASSERT(solutionCoefs.size()==(size_t)(times.rows()),"Number of time and solution steps should match! "<<solutionCoefs.size()<<"!="<<times.rows());
+  index_t nsteps = times.rows();
+  index_t size = solutionCoefs.at(0).rows();
+
+  // Prepare fitting basis
+  gsKnotVector<T> kv(ptimes.minCoeff(),ptimes.maxCoeff(),nsteps-(deg+1),deg+1);
+  gsBSplineBasis<T> lbasis(kv);
+
+
+  //////// TO DO:
+  //////// - Make multi-patch compatible
+  //////// - Include dimension d
+
+  gsMatrix<T> rhs(times.size(),size+1);
+
+  for (index_t lam = 0; lam!=nsteps; ++lam)
+  {
+    rhs.block(lam,0,1,size ) = solutionCoefs.at(lam).reshape(1,size);
+    rhs(lam,size) = times.at(lam) ;
+  }
+
+  // get the Greville Abcissae (anchors)
+  gsMatrix<T> anchors = lbasis.anchors();
+
+  // Get the collocation matrix at the anchors
+  gsSparseMatrix<T> C;
+  lbasis.collocationMatrix(anchors,C);
+
+  gsSparseSolver<>::LU solver;
+  solver.compute(C);
+
+  gsMatrix<T> sol = solver.solve(rhs);
+
+  // gsTensorBSpline<3,T> tspline = tbasis.makeGeometry(give(coefs)).release();
+  gsBSpline<T> tspline(lbasis,give(sol));
+  return tspline;
+}
+
+template<class T>
+gsMatrix<T> nearestPoint(const gsMatrix<T>& spacePoint, const gsBSpline<T> & bspline, index_t nTrialPoints, index_t nIterations)
+{
+  // GISMO_ASSERT(spacePoint.rows() == 3 && spacePoint.cols() == 1, "Invalid dimensions");
+  gsMatrix<T> supp = bspline.support();
+  gsVector<T> start = supp.col(0), end = supp.col(1);
+  gsMatrix<T> trialPoints = uniformPointGrid(start, end, nTrialPoints);
+  gsMatrix<T> surfVal, surfDeriv, surfDeriv2;
+  gsMatrix<T> closestParam;
+  gsMatrix<T> u, du;
+  T tol = 1e-8;
+  T err = 1;
+  T closestSqDist(10e100);
+
+  for(int idxTrial = 0; idxTrial < nTrialPoints; idxTrial++)
+  {
+      u = trialPoints.col(idxTrial);
+      // apply Newton's method to the function
+      // f(u) = ||p - x(u)||^2
+      // where x(u) is the parametrisation of the curve in space.
+      // (todo - also check the distances at the endpoints of the curve?
+      // although this is for splitting the curve and we would never want
+      // to split at the endpoint.)
+      for(int iteration = 0; iteration < nIterations; iteration++)
+      {
+          bspline.eval_into(u, surfVal);
+          bspline.jacobian_into(u, surfDeriv);
+          bspline.deriv2_into(u, surfDeriv2);
+
+          // evaluate derivative of f
+          gsMatrix<T> sqDistDeriv = -2 * (spacePoint - surfVal).transpose() *
+                  surfDeriv;
+          GISMO_ASSERT(sqDistDeriv.rows() == 1 && sqDistDeriv.cols() == 1, "Derivative should be 1x1");
+
+          gsMatrix<T> sqDistDeriv2 = 2*surfDeriv.transpose() * surfDeriv - 2*(spacePoint - surfVal).transpose() * surfDeriv2;
+          GISMO_ASSERT(sqDistDeriv2.rows() == 1 && sqDistDeriv2.cols() == 1, "Second derivative should be 1x1");
+
+          du = sqDistDeriv / sqDistDeriv2(0, 0);
+          u -= du;
+
+          if (du.norm()/u.norm() < tol)
+            break;
+
+          u(0, 0) = (u(0, 0) < supp(0, 0))? supp(0, 0): ((u(0, 0) > supp(0, 1)? supp(0, 1): u(0, 0)));
+      }
+      // compute sqDist for the point found by the last iteration, and compare against the best seen so far
+      bspline.eval_into(u, surfVal);
+      T sqDist = (spacePoint - surfVal).squaredNorm();
+      if(idxTrial == 0 || sqDist < closestSqDist)
+      {
+          closestParam = u;
+          closestSqDist = sqDist;
+      }
+  }
+  return closestParam;
 }
 
 template<index_t dim, class T>
