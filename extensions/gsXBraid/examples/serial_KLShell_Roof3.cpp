@@ -172,6 +172,7 @@ int main (int argc, char** argv)
 
     // Boundary conditions
     gsBoundaryConditions<> BCs;
+    BCs.setGeoMap(mp);
     gsPointLoads<real_t> pLoads = gsPointLoads<real_t>();
 
     // Initiate Surface forces
@@ -321,7 +322,7 @@ int main (int argc, char** argv)
     arcLength = new gsALMCrisfield<real_t>(Jacobian, ALResidual, Force);
     // arcLength = new gsALMRiks<real_t>(Jacobian, ALResidual, Force);
 
-    arcLength->options().setInt("Solver",0); // LDLT solver
+    arcLength->options().setString("Solver","SimplicialLDLT"); // LDLT solver
     arcLength->options().setInt("BifurcationMethod",0); // 0: determinant, 1: eigenvalue
     arcLength->options().setReal("Length",dL);
     // arcLength->options().setInt("AngleMethod",0); // 0: step, 1: iteration
@@ -594,7 +595,7 @@ int main (int argc, char** argv)
       //////////////////////////////////////////////////////////////////////////////////////////////
       gsDebugVar(it);
 
-      Nintervals = 4;
+      Nintervals = 3;
       stepSolutions.resize(Nintervals);
       stepTimes.resize(Nintervals);
       distances.resize(Nintervals+1);
@@ -968,8 +969,7 @@ gsTensorBSpline<dim,T> gsSpaceTimeFit(const std::vector<gsMatrix<T>> & solutionC
   gsMatrix<> anchors = lbasis.anchors();
 
   // Get the collocation matrix at the anchors
-  gsSparseMatrix<> C;
-  lbasis.collocationMatrix(anchors,C);
+  gsSparseMatrix<> C = lbasis.collocationMatrix(anchors);
 
   gsSparseSolver<>::LU solver;
   solver.compute(C);
