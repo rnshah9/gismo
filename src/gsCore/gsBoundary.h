@@ -241,6 +241,8 @@ public:
     boxSide& side()       {return *this;}
     const boxSide& side() const {return *this;}
 
+    index_t patchIndex() {return patch;}
+
     /**
      * @brief returns the vector of the corners contained in the side
      * @param dim is the ambient dimension
@@ -738,6 +740,11 @@ public:
                 && directionOrientation==other.directionOrientation;
     }
 
+    inline bool operator< (const boundaryInterface& other) const
+    {
+        return ps1<other.ps1 || (ps1==other.ps1 && ps2<other.ps2);
+    }
+
     /**
      * @brief first, returns the first patchSide of this interface
     **/
@@ -1048,5 +1055,13 @@ gsMatrix<T> getFace (const boxSide side, const gsMatrix<T> &box)
     return temp;
 }
 
+#ifdef GISMO_BUILD_PYBIND11
+
+  /**
+   * @brief Initializes the Python wrapper for the class: gsBoundary
+   */
+  void pybind11_enum_gsBoundary(pybind11::module &m);
+
+#endif // GISMO_BUILD_PYBIND11
 
 } // namespace gismo

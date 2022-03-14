@@ -1,4 +1,3 @@
-
 /** @file gsBasis.h
 
     @brief Provides declaration of Basis abstract interface.
@@ -937,7 +936,7 @@ public:
     /// The collocation matrix is a sparse matrix with \em u.cols rows
     /// and \em size() columns. The entry \em (i,j) is the value of
     /// basis function \em j at evaluation point \em i.
-    void collocationMatrix(gsMatrix<T> const& u, gsSparseMatrix<T> & result) const;
+    gsSparseMatrix<T> collocationMatrix(gsMatrix<T> const& u) const;
 
     /// Reverse the basis
     virtual void reverse();
@@ -967,6 +966,14 @@ protected:
 
 }; // class gsBasis
 
+#ifdef GISMO_BUILD_PYBIND11
+
+  /**
+   * @brief Initializes the Python wrapper for the class: gsGeometry
+   */
+  void pybind11_init_gsBasis(pybind11::module &m);
+
+#endif // GISMO_BUILD_PYBIND11
 
 } // namespace gismo
 

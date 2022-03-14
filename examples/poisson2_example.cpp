@@ -128,7 +128,8 @@ int main(int argc, char *argv[])
     {
         dbasis.uniformRefine();
 
-        u.setup(bc, dirichlet::interpolation, 0);
+//        u.setup(bc, dirichlet::interpolation, 0);
+        u.setup(bc, dirichlet::l2Projection, 0);
 
         // Initialize the system
         A.initSystem();
@@ -139,17 +140,16 @@ int main(int argc, char *argv[])
         timer.restart();
         // Compute the system matrix and right-hand side
         A.assemble(
-            igrad(u, G) * igrad(u, G).tr()
-            * meas(G)
+            igrad(u, G) * igrad(u, G).tr() * meas(G) //matrix
             ,
-            u * ff
-            * meas(G)
+            u * ff * meas(G) //rhs vector
             );
+
+        // Compute the Neumann terms defined on physical space
+        auto g_N = A.getBdrFunction(G);
+        A.assembleBdr(bc.get("Neumann"), u * g_N.tr() * nv(G) );
+
         ma_time += timer.stop();
-        
-        // Enforce Neumann conditions to right-hand side
-        // auto g_N = A.getBdrFunction();
-        // A.assembleRhsBc(u * g_N.val() * nv(G).norm(), bc.neumannSides() );
 
         // gsDebugVar(A.matrix().toDense());
         // gsDebugVar(A.rhs().transpose()   );
@@ -201,19 +201,6 @@ int main(int argc, char *argv[])
                   h1err.tail(numRefine).array() ).log().transpose() / std::log(2.0) <<"\n";
     }
     //! [Error and convergence rates]
-
-#ifdef GISMO_WITH_MATPLOTLIB
-    std::vector<real_t> xa(numRefine+1);
-    std::iota(std::begin(xa), std::end(xa), 0);
-
-    plt::title("Convergence rates");
-    plt::named_semilogy("$H^1$ error", xa, h1err);
-    plt::named_semilogy("$L^2$ error", xa, l2err);
-    plt::legend();
-    plt::show();
-    //plt::save("./poisson2_example.png");
-    Py_Finalize();
-#endif
 
     //! [Export visualization in ParaView]
     if (plot)

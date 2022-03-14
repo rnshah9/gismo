@@ -81,21 +81,21 @@ void gsAdaptiveMeshing<T>::_markElements( const std::vector<T> & elError, int re
 template <class T>
 void gsAdaptiveMeshing<T>::_markFraction( const std::vector<T> & elError, T refParameter, std::vector<bool> & elMarked)
 {
-    T Thr = T(0);
+    T Thr = (T)(0);
 
     // The vector of local errors will need to be sorted,
     // which will be done on a copy:
     std::vector<T> elErrCopy = elError;
 
     // Compute the sum, i.e., the global/total error
-    T totalError = T(0);
+    T totalError = (T)(0);
     for( size_t i = 0; i < elErrCopy.size(); ++i)
         totalError += elErrCopy[i];
 
     // We want to mark just enough cells such that their
     // cummulated errors add up to a certain fraction
     // of the total error.
-    T errorMarkSum = (1-refParameter) * totalError;
+    T errorMarkSum = ((T)1-refParameter) * totalError;
     T cummulErrMarked = 0;
 
     T tmp;
@@ -128,7 +128,7 @@ void gsAdaptiveMeshing<T>::_markFraction( const std::vector<T> & elError, T refP
 template <class T>
 void gsAdaptiveMeshing<T>::_markPercentage( const std::vector<T> & elError, T refParameter, std::vector<bool> & elMarked)
 {
-    T Thr = T(0);
+    T Thr = (T)(0);
 
     // Total number of elements:
     size_t NE = elError.size();
@@ -138,7 +138,7 @@ void gsAdaptiveMeshing<T>::_markPercentage( const std::vector<T> & elError, T re
 
     // Compute the index from which the refinement should start,
     // once the vector is sorted.
-    size_t idxRefineStart = cast<T,size_t>( math::floor( refParameter * T(NE) ) );
+    size_t idxRefineStart = cast<T,size_t>( math::floor( refParameter * (T)(NE) ) );
     // ...and just to be sure we are in range:
     if( idxRefineStart == elErrCopy.size() )
     {
@@ -319,8 +319,8 @@ void gsAdaptiveMeshing<T>::mark(const std::vector<T> & errors)
             for (size_t k = 0; k<errors.size(); k++)
         #   endif
             {
-                crsErrors[k] = -std::abs(errors[k]);
-                refErrors[k] =  std::abs(errors[k]);
+                crsErrors[k] = -math::abs(errors[k]);
+                refErrors[k] =  math::abs(errors[k]);
             }
         }
     }
@@ -336,8 +336,8 @@ void gsAdaptiveMeshing<T>::mark(const std::vector<T> & errors)
             for (size_t k = 0; k<errors.size(); k++)
         #   endif
             {
-                crsErrors[k] = -std::abs(errors[k]); // DO NOT TAKE ABS HERE BUT IN DWR
-                refErrors[k] =  std::abs(errors[k]);
+                crsErrors[k] = -math::abs(errors[k]); // DO NOT TAKE ABS HERE BUT IN DWR
+                refErrors[k] =  math::abs(errors[k]);
             }
         }
     }
@@ -430,14 +430,12 @@ void gsAdaptiveMeshing<T>::_refineMarkedElements( gsFunctionSet<T> * input,
             }
         }
 
-        gsMultiPatch<T> * mp;
-        gsMultiBasis<T> * mb;
-        if ((mp = dynamic_cast<gsMultiPatch<T>*>(input)))
+        if (gsMultiPatch<T> * mp = dynamic_cast<gsMultiPatch<T>*>(input))
         {
             std::vector<index_t> elements = mp->patch(pn).basis().asElements(refBoxes, refExtension);
             mp->patch(pn).refineElements( elements );
         }
-        else if ((mb = dynamic_cast<gsMultiBasis<T>*>(input)))
+        else if (gsMultiBasis<T> * mb = dynamic_cast<gsMultiBasis<T>*>(input))
         {
             mb->refine( pn, refBoxes, refExtension );
         }
@@ -497,15 +495,13 @@ void gsAdaptiveMeshing<T>::_unrefineMarkedElements(   gsFunctionSet<T> * input,
             }
         }
 
-        gsMultiPatch<T> * mp;
-        gsMultiBasis<T> * mb;
-        if ((mp = dynamic_cast<gsMultiPatch<T>*>(input)))
+        if (gsMultiPatch<T> * mp = dynamic_cast<gsMultiPatch<T>*>(input))
         {
             // Refine all of the found refBoxes in this patch
             std::vector<index_t> elements = mp->patch(pn).basis().asElementsUnrefine(refBoxes, extension);
             mp->patch(pn).unrefineElements( elements );
         }
-        else if ((mb = dynamic_cast<gsMultiBasis<T>*>(input)))
+        else if (gsMultiBasis<T> * mb = dynamic_cast<gsMultiBasis<T>*>(input))
         {
             // Refine all of the found refBoxes in this patch
             mb->unrefine( pn, refBoxes, extension );
@@ -584,9 +580,7 @@ void gsAdaptiveMeshing<T>::_processMarkedElements(gsFunctionSet<T> * input,
             globalCount++;
         }
 
-        gsMultiPatch<T> * mp;
-        gsMultiBasis<T> * mb;
-        if ((mp = dynamic_cast<gsMultiPatch<T>*>(input)))
+        if (gsMultiPatch<T> * mp = dynamic_cast<gsMultiPatch<T>*>(input))
         {
             std::vector<index_t> elements;
             // Unrefine all of the found refBoxes in this patch
@@ -597,7 +591,7 @@ void gsAdaptiveMeshing<T>::_processMarkedElements(gsFunctionSet<T> * input,
             elements = mp->patch(pn).basis().asElements(refBoxes, refExtension);
             mp->patch(pn).refineElements( elements );
         }
-        else if ((mb = dynamic_cast<gsMultiBasis<T>*>(input)))
+        else if (gsMultiBasis<T> * mb = dynamic_cast<gsMultiBasis<T>*>(input))
         {
             // Refine all of the found refBoxes in this patch
             mb->unrefine( pn, crsBoxes, crsExtension);
@@ -693,13 +687,11 @@ void gsAdaptiveMeshing<T>::_flattenElements(  gsFunctionSet<T> * input,
             // }
             // gsDebug<<"\n";
         }
-        gsMultiPatch<T> * mp;
-        gsMultiBasis<T> * mb;
-        if ((mp = dynamic_cast<gsMultiPatch<T>*>(input)))
+        if (gsMultiPatch<T> * mp = dynamic_cast<gsMultiPatch<T>*>(input))
         {
             mp->patch(pn).unrefineElements( elements );
         }
-        else if ((mb = dynamic_cast<gsMultiBasis<T>*>(input)))
+        else if (gsMultiBasis<T> * mb = dynamic_cast<gsMultiBasis<T>*>(input))
         {
             // Refine all of the found refBoxes in this patch
             mb->unrefineElements(pn, elements );

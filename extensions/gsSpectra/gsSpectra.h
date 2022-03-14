@@ -18,20 +18,20 @@
 #include <gsCore/gsConfig.h>
 #include <gsCore/gsLinearAlgebra.h>
 
-#include <Spectra/Spectra/SymEigsSolver.h>
-#include <Spectra/Spectra/SymEigsShiftSolver.h>
-#include <Spectra/Spectra/SymGEigsSolver.h>
-#include <Spectra/Spectra/SymGEigsShiftSolver.h>
-#include <Spectra/Spectra/GenEigsSolver.h>
-#include <Spectra/Spectra/GenEigsRealShiftSolver.h>
-#include <Spectra/Spectra/MatOp/SparseGenMatProd.h>
-//#include <Spectra/Spectra/MatOp/DenseSymMatProd.h> // included by SymEigsSolver.h
-#include <Spectra/Spectra/MatOp/SparseCholesky.h>
-#include <Spectra/Spectra/MatOp/DenseCholesky.h>
-#include <Spectra/Spectra/MatOp/SparseRegularInverse.h>
-#include <Spectra/Spectra/MatOp/SymShiftInvert.h>
-#include <Spectra/Spectra/MatOp/DenseSymShiftSolve.h>
-#include <Spectra/Spectra/MatOp/SparseSymShiftSolve.h>
+#include <Spectra/SymEigsSolver.h>
+#include <Spectra/SymEigsShiftSolver.h>
+#include <Spectra/SymGEigsSolver.h>
+#include <Spectra/SymGEigsShiftSolver.h>
+#include <Spectra/GenEigsSolver.h>
+#include <Spectra/GenEigsRealShiftSolver.h>
+#include <Spectra/MatOp/SparseGenMatProd.h>
+//#include <Spectra/MatOp/DenseSymMatProd.h> // included by SymEigsSolver.h
+#include <Spectra/MatOp/SparseCholesky.h>
+#include <Spectra/MatOp/DenseCholesky.h>
+#include <Spectra/MatOp/SparseRegularInverse.h>
+#include <Spectra/MatOp/SymShiftInvert.h>
+#include <Spectra/MatOp/DenseSymShiftSolve.h>
+#include <Spectra/MatOp/SparseSymShiftSolve.h>
 
 namespace gismo {
 
@@ -45,6 +45,7 @@ public:
     typedef typename MatrixType::Nested NestedMatrix;
     NestedMatrix m_mat;
 public:
+    SpectraMatProd(const MatrixType&&   ) = delete;
     SpectraMatProd(const MatrixType& mat) : m_mat(mat) { }
     int rows() const { return m_mat.rows(); }
     int cols() const { return m_mat.cols(); }
@@ -68,6 +69,7 @@ public:
     typename gsSparseSolver<Scalar>::LU m_solver;
 
 public:
+    SpectraMatShiftSolve(const MatrixType&&   ) = delete;
     SpectraMatShiftSolve(const MatrixType& mat)
     :
     m_mat(mat), m_n(mat.rows())
@@ -142,7 +144,7 @@ public:
     gsInfo << slv.eigenvalues()  <<"\n";
     gsInfo << slv.eigenvectors() <<"\n";
     }
-    \code
+    \endcode
 */
 template <class MatrixType>
 class gsSpectraSolver : private SpectraMatProd<MatrixType>,
