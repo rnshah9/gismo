@@ -87,6 +87,18 @@ int main(int argc, char **argv)
     // Computes the dot product of two vectors
     computeDotProduct(mpi, comm);
 
+    gsVector<real_t> coord(2);
+    if(_rank == 0)
+    {
+        coord<<1.0,2.0;
+        comm.send(&coord, 1, 1, 0);
+    }
+    else
+    {
+        comm.recv(&coord, 1, 0, 0);
+        gsDebugVar(coord);
+    }
+
     comm.barrier();
     gsInfo << "Good bye G+Smo, from process " << _rank << " on "
            << cpuname << "\n";
