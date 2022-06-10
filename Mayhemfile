@@ -1,0 +1,11 @@
+project: gismo
+target: gismo
+image: ghcr.io/rnshah9/playground:gismo
+testsuite:
+  - file://filedata/bspbasis/tpBSpline2_02.xml
+#t
+cmds:
+  - cmd: /home/gismo/gismo/build/bin/fileIo_example /text.xml
+    filepath: /test.xml
+    env:
+      DISABLE_SMOKETEST: '1'
